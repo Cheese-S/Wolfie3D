@@ -1,4 +1,9 @@
-include(./.env.cmake OPTIONAL RESULT_VARIABLE LOCAL_ENV)
+if (WIN32)
+    include(./windows.env.cmake OPTIONAL RESULT_VARIABLE LOCAL_ENV)
+endif()
+if (UNIX)
+    include(./unix.env.cmake OPTIONAL RESULT_VARIABLE LOCAL_ENV)
+endif()
 message(STATUS "Local .env.cmake: ${LOCAL_ENV}")
 
 # Specify the minimum version for CMake
@@ -9,7 +14,8 @@ set(NAME Engine)
 
 # Specify generators and compilers
 message(STATUS "using ${CMAKE_GENERATOR}")
-if (CMAKE_GENERATOR STREQUAL "Ninja")
+
+if (CMAKE_GENERATOR STREQUAL "Ninja" AND WIN32)
     if (NOT MINGW_PATH)
         message(FATAL_ERROR "MINGW_PATH not set in .env.cmake")
     endif()
@@ -30,7 +36,7 @@ if (DEFINED VULKAN_SDK_PATH)
 else()
     find_package(Vulkan REQUIRED) # throws error if could not find Vulkan
     message(STATUS "Found Vulkan: $ENV{VULKAN_SDK}")
-    set(Vulkan_LIBRARIES "$ENV{Vulkan_SDK}/Lib")
+    #set(Vulkan_LIBRARIES "$ENV{Vulkan_SDK}/Lib")
 endif()
 if (NOT Vulkan_FOUND)
 	message(FATAL_ERROR "Could not find Vulkan library!")
