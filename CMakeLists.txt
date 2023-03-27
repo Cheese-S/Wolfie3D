@@ -1,4 +1,9 @@
-include(./.env.cmake OPTIONAL RESULT_VARIABLE LOCAL_ENV)
+if (WIN32)
+    include(./windows.env.cmake OPTIONAL RESULT_VARIABLE LOCAL_ENV)
+endif()
+if (UNIX)
+    include(./unix.env.cmake OPTIONAL RESULT_VARIABLE LOCAL_ENV)
+endif()
 message(STATUS "Local .env.cmake: ${LOCAL_ENV}")
 
 # Specify the minimum version for CMake
