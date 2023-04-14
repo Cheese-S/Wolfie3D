@@ -10,7 +10,7 @@ message(STATUS "Local .env.cmake: ${LOCAL_ENV}")
 
 cmake_minimum_required(VERSION 3.11.0)
 
-set(NAME Engine)
+set(NAME Wolfie3D)
 
 # Specify generators and compilers
 message(STATUS "using ${CMAKE_GENERATOR}")
@@ -76,6 +76,11 @@ if (NOT TINYOBJ_PATH)
     set(TINYOBJ_PATH external/tinyobj)
 endif()
 
+if (NOT VMA_PATH)
+    message(STATUS "VMA_PATH not specified in .enc.cmake using external/vulkan_memory_allocator")
+    set(VMA_PATH external/vulkan_memory_allocator)
+endif()
+
 file(GLOB_RECURSE SOURCES ${PROJECT_SOURCE_DIR}/src/*.cpp)
 
 add_executable(${PROJECT_NAME} ${SOURCES})
@@ -104,6 +109,7 @@ if (WIN32)
         ${GLM_PATH}
         ${TINYGLTF_PATH}
         ${TINYOBJ_PATH}
+        ${VMA_PATH}
     )
 
     target_link_directories(${PROJECT_NAME} PUBLIC
@@ -118,6 +124,7 @@ elseif (UNIX)
         ${PROJECT_SOURCE_DIR}/src
         ${TINYGLTF_PATH}
         ${TINYOBJ_PATH}
+        ${VMA_PATH}
     )
     target_link_libraries(${PROJECT_NAME} glfw ${Vulkan_LIBRARIES})
 endif()
@@ -142,4 +149,4 @@ endForeach()
 
 add_custom_target(shaders ALL DEPENDS ${SPV_SHADERS})
 
-add_dependencies(Engine shaders)
+add_dependencies(Wolfie3D shaders)
