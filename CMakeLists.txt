@@ -36,7 +36,9 @@ if (DEFINED VULKAN_SDK_PATH)
 else()
     find_package(Vulkan REQUIRED) # throws error if could not find Vulkan
     message(STATUS "Found Vulkan: $ENV{VULKAN_SDK}")
-    #set(Vulkan_LIBRARIES "$ENV{Vulkan_SDK}/Lib")
+    if (CMAKE_GENERATOR MATCHES "Visual Studio")
+        set(Vulkan_LIBRARIES "$ENV{Vulkan_SDK}/Lib")
+    endif()
 endif()
 if (NOT Vulkan_FOUND)
 	message(FATAL_ERROR "Could not find Vulkan library!")
@@ -71,10 +73,6 @@ if (NOT TINYGLTF_PATH)
     set(TINYGLTF_PATH external/tinygltf)
 endif()
 
-if (NOT TINYOBJ_PATH)
-    message(STATUS "TINYOBJ_PATH not specified in .env.cmake, using external/tinyobj")
-    set(TINYOBJ_PATH external/tinyobj)
-endif()
 
 if (NOT VMA_PATH)
     message(STATUS "VMA_PATH not specified in .enc.cmake using external/vulkan_memory_allocator")
@@ -108,7 +106,6 @@ if (WIN32)
         ${GLFW_INCLUDE_DIRS}
         ${GLM_PATH}
         ${TINYGLTF_PATH}
-        ${TINYOBJ_PATH}
         ${VMA_PATH}
     )
 
@@ -123,7 +120,6 @@ elseif (UNIX)
     target_include_directories(${PROJECT_NAME} PUBLIC
         ${PROJECT_SOURCE_DIR}/src
         ${TINYGLTF_PATH}
-        ${TINYOBJ_PATH}
         ${VMA_PATH}
     )
     target_link_libraries(${PROJECT_NAME} glfw ${Vulkan_LIBRARIES})
