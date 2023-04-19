@@ -3,20 +3,29 @@
 #include <stdint.h>
 
 #include <array>
+#include <chrono>
 #include <memory>
-#include <ostream>
 #include <stdexcept>
+#include <utility>
 #include <vector>
+
+#define GLM_FORCE_RADIANS
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
 
 #include "common.hpp"
 #include "device.hpp"
+#include "glm/ext/matrix_float4x4.hpp"
+#include "glm/fwd.hpp"
+#include "glm/trigonometric.hpp"
+#include "memory.hpp"
+#include "model.hpp"
+#include "resource_manager.hpp"
 #include "swapchain.hpp"
-#include "vulkan/vulkan.hpp"
-#include "vulkan/vulkan_core.h"
 #include "vulkan/vulkan_enums.hpp"
 #include "vulkan/vulkan_handles.hpp"
 #include "vulkan/vulkan_raii.hpp"
 #include "vulkan/vulkan_structs.hpp"
+#include "window.hpp"
 
 namespace W3D {
 Renderer::Renderer(ResourceManager* pResourceManager, Window* pWindow, Config config)
@@ -25,42 +34,44 @@ Renderer::Renderer(ResourceManager* pResourceManager, Window* pWindow, Config co
       instance_(pWindow),
       device_(&instance_),
       swapchain_(&instance_, &device_, pWindow_),
+      allocator_(instance_, device_),
       config_(config) {
     initVulkan();
 }
 
-Renderer::~Renderer() { device_.handle().waitIdle(); }
+Renderer::~Renderer() { device_->waitIdle(); }
 
 void Renderer::drawFrame() {
     const auto& device_handle_ = device_.handle();
+    const auto& currentFrame = frameResources_[currentFrameIdx_];
     while (vk::Result::eTimeout ==
-           device_handle_.waitForFences({*inflightFences_[currentFrame_]}, true, UINT64_MAX))
+           device_handle_.waitForFences({*currentFrame.inflightFence}, true, UINT64_MAX))
         ;
 
     auto [result, imageIndex] =
-        swapchain_.acquireNextImage(UINT64_MAX, *imageAvaliableSemaphores_[currentFrame_], nullptr);
+        swapchain_.acquireNextImage(UINT64_MAX, *currentFrame.imageAvaliableSemaphore, nullptr);
     if (result == vk::Result::eErrorOutOfDateKHR) {
         swapchain_.recreate();
     }
-    device_handle_.resetFences({*inflightFences_[currentFrame_]});
-    commandBuffers_[currentFrame_].reset();
-    recordCommandBuffer(commandBuffers_[currentFrame_], imageIndex);
+    updateUniformBuffer();
+    device_handle_.resetFences({*currentFrame.inflightFence});
+    currentFrame.commandBuffer.reset();
+    recordCommandBuffer(currentFrame.commandBuffer, imageIndex);
 
     vk::SubmitInfo submitInfo;
-    std::array<vk::Semaphore, 1> waitSemaphores{*imageAvaliableSemaphores_[currentFrame_]};
+    std::array<vk::Semaphore, 1> waitSemaphores{*currentFrame.imageAvaliableSemaphore};
     vk::PipelineStageFlags waitStages = {vk::PipelineStageFlagBits::eColorAttachmentOutput};
+    submitInfo.pWaitDstStageMask = &waitStages;
     submitInfo.waitSemaphoreCount = 1;
     submitInfo.pWaitSemaphores = waitSemaphores.data();
-    submitInfo.pWaitDstStageMask = &waitStages;
-
     submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &(*commandBuffers_[currentFrame_]);
+    submitInfo.pCommandBuffers = &(*currentFrame.commandBuffer);
 
-    std::array<vk::Semaphore, 1> signalSemaphores{*renderFinishedSemaphores_[currentFrame_]};
+    std::array<vk::Semaphore, 1> signalSemaphores{*currentFrame.renderFinishedSemaphore};
     submitInfo.signalSemaphoreCount = 1;
     submitInfo.pSignalSemaphores = signalSemaphores.data();
 
-    device_.graphicsQueue().submit({submitInfo}, *inflightFences_[currentFrame_]);
+    device_.graphicsQueue().submit({submitInfo}, *currentFrame.inflightFence);
 
     std::array<vk::SwapchainKHR, 1> swapchains = {*swapchain_.handle()};
     std::array<uint32_t, 1> imageIndices = {imageIndex};
@@ -76,10 +87,11 @@ void Renderer::drawFrame() {
     } else if (result != vk::Result::eSuccess) {
         throw std::runtime_error("failed to present swap chain image");
     }
-    currentFrame_ = (currentFrame_ + 1) % config_.maxFramesInFlight;
+    currentFrameIdx_ = (currentFrameIdx_ + 1) % config_.maxFramesInFlight;
 }
 
-void Renderer::recordCommandBuffer(vk::raii::CommandBuffer& commandBuffer, uint32_t imageIndex) {
+void Renderer::recordCommandBuffer(const vk::raii::CommandBuffer& commandBuffer,
+                                   uint32_t imageIndex) {
     vk::CommandBufferBeginInfo beginInfo;
 
     commandBuffer.begin(beginInfo);
@@ -93,18 +105,50 @@ void Renderer::recordCommandBuffer(vk::raii::CommandBuffer& commandBuffer, uint3
     renderPassInfo.setClearValues(clearColor);
 
     commandBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
-
     commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline_);
+    commandBuffer.bindVertexBuffers(0, {pModel_->vertexBufferHandle()}, {0});
+    commandBuffer.bindIndexBuffer(pModel_->indexBufferHandle(), 0, vk::IndexType::eUint32);
+
     vk::Viewport viewport(0.0f, 0.0f, static_cast<float>(swapchain_.extent().width),
                           static_cast<float>(swapchain_.extent().height), 0.0f, 1.0f);
     commandBuffer.setViewport(0, viewport);
+
     vk::Rect2D scissor({0, 0}, swapchain_.extent());
     commandBuffer.setScissor(0, scissor);
-    commandBuffer.draw(3, 1, 0, 0);
+    commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *layout_, 0,
+                                     {*currentFrame().descriptorSet}, {});
 
+    commandBuffer.draw(6, 1, 0, 0);
     commandBuffer.endRenderPass();
 
     commandBuffer.end();
+}
+
+void Renderer::updateUniformBuffer() {
+    static auto startTime = std::chrono::high_resolution_clock::now();
+
+    auto currentTime = std::chrono::high_resolution_clock::now();
+    float time =
+        std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
+    UniformBufferObject ubo{};
+    ubo.model =
+        glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+    ;
+    ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f),
+                           glm::vec3(0.0f, 0.0f, 1.0f));
+    ubo.proj = glm::perspective(
+        glm::radians(45.0f),
+        swapchain_.extent().width / static_cast<float>(swapchain_.extent().height), 0.1f, 10.0f);
+    ubo.proj[1][1] *= -1;  // * Flip Y coordiante so that projection works with vulkan
+
+    auto& pUniformBuffer = currentFrame().uniformBuffer;
+    if (pUniformBuffer->isHostVisible()) {
+        memcpy(pUniformBuffer->mappedData(), &ubo, sizeof(ubo));
+    } else {
+        auto pStagingBuffer = allocator_.allocateStagingBuffer(sizeof(ubo));
+        vk::BufferCopy copyRegion(0, 0, sizeof(ubo));
+        device_.transferBuffer(pStagingBuffer.get(), pUniformBuffer.get(), copyRegion);
+    }
 }
 
 void Renderer::recreateSwapchain() {
@@ -113,11 +157,14 @@ void Renderer::recreateSwapchain() {
 }
 
 void Renderer::initVulkan() {
+    auto raw = pResourceManager_->loadGLTFModel("2.0/BoxVertexColors/glTF/BoxVertexColors.gltf");
+    pModel_ = std::make_unique<gltf::Model>(raw, &device_, &allocator_);
     createRenderPass();
-    createGraphicsPipeline();
+    createDescriptorSetLayout();
+    createDescriptorPool();
     swapchain_.createFrameBuffers(renderPass_);
-    createCommandBuffers();
-    createSyncObjects();
+    createFrameDatas();
+    createGraphicsPipeline();
 }
 
 void Renderer::createRenderPass() {
@@ -148,7 +195,7 @@ void Renderer::createRenderPass() {
         vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite;
 
     vk::RenderPassCreateInfo renderPassInfo({}, 1, &colorAttachment, 1, &subpass, 1, &dependency);
-    renderPass_ = device_.handle().createRenderPass(renderPassInfo);
+    renderPass_ = device_->createRenderPass(renderPassInfo);
 
     // vk::AttachmentDescription colorAttachmentResolve;
     // colorAttachmentResolve.format = swapchain_.imageFormat();
@@ -197,9 +244,78 @@ vk::Format Renderer::findDepthFormat() {
     throw std::runtime_error("failed to find supported depth format!");
 }
 
+void Renderer::createDescriptorSetLayout() {
+    vk::DescriptorSetLayoutBinding uboLayoutBinding(0, vk::DescriptorType::eUniformBuffer, 1,
+                                                    vk::ShaderStageFlagBits::eVertex);
+    std::array<vk::DescriptorSetLayoutBinding, 1> bindings = {uboLayoutBinding};
+    vk::DescriptorSetLayoutCreateInfo layoutInfo({}, bindings);
+    descriptorSetLayout_ = device_->createDescriptorSetLayout(layoutInfo);
+}
+
+void Renderer::createDescriptorPool() {
+    std::array<vk::DescriptorPoolSize, 1> poolSizes;
+    poolSizes[0] = {vk::DescriptorType::eUniformBuffer,
+                    static_cast<uint32_t>(config_.maxFramesInFlight)};
+
+    vk::DescriptorPoolCreateInfo poolInfo({vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet},
+                                          config_.maxFramesInFlight, poolSizes);
+    descriptorPool_ = device_->createDescriptorPool(poolInfo);
+}
+
+void Renderer::createFrameDatas() {
+    frameResources_.resize(config_.maxFramesInFlight);
+    createCommandBuffers();
+    createUniformBuffers();
+    createSyncObjects();
+    createDescriptorSets();
+}
+
+void Renderer::createCommandBuffers() {
+    vk::CommandBufferAllocateInfo commandBufferAllocInfo;
+    commandBufferAllocInfo.level = vk::CommandBufferLevel::ePrimary;
+    commandBufferAllocInfo.commandBufferCount = config_.maxFramesInFlight;
+    std::vector<vk::raii::CommandBuffer> commandBuffers =
+        device_.allocateCommandBuffers(commandBufferAllocInfo);
+    for (int i = 0; i < config_.maxFramesInFlight; i++) {
+        frameResources_[i].commandBuffer = std::move(commandBuffers[i]);
+    }
+}
+
+void Renderer::createUniformBuffers() {
+    for (int i = 0; i < config_.maxFramesInFlight; i++) {
+        frameResources_[i].uniformBuffer =
+            allocator_.allocateUniformBuffer(sizeof(UniformBufferObject));
+    }
+}
+
+void Renderer::createSyncObjects() {
+    vk::SemaphoreCreateInfo semaphoreInfo;
+    vk::FenceCreateInfo fenceInfo(vk::FenceCreateFlagBits::eSignaled);
+    for (int i = 0; i < config_.maxFramesInFlight; i++) {
+        frameResources_[i].imageAvaliableSemaphore = device_->createSemaphore(semaphoreInfo);
+        frameResources_[i].renderFinishedSemaphore = device_->createSemaphore(semaphoreInfo);
+        frameResources_[i].inflightFence = device_->createFence(fenceInfo);
+    }
+}
+
+void Renderer::createDescriptorSets() {
+    std::vector<vk::DescriptorSetLayout> layouts(config_.maxFramesInFlight, *descriptorSetLayout_);
+    vk::DescriptorSetAllocateInfo allocInfo(*descriptorPool_, layouts);
+    auto descriptorSets = device_->allocateDescriptorSets(allocInfo);
+    for (int i = 0; i < config_.maxFramesInFlight; i++) {
+        frameResources_[i].descriptorSet = std::move(descriptorSets[i]);
+        vk::DescriptorBufferInfo bufferInfo(frameResources_[i].uniformBuffer->handle(), 0,
+                                            sizeof(UniformBufferObject));
+        std::array<vk::WriteDescriptorSet, 1> descriptorWrites;
+        descriptorWrites[0] = {*frameResources_[i].descriptorSet,  0,       0,          1,
+                               vk::DescriptorType::eUniformBuffer, nullptr, &bufferInfo};
+        device_->updateDescriptorSets(descriptorWrites, nullptr);
+    }
+}
+
 void Renderer::createGraphicsPipeline() {
-    vk::raii::ShaderModule vertShaderModule = createShaderModule("shaders/shader.vert.spv");
-    vk::raii::ShaderModule fragShaderModule = createShaderModule("shaders/shader.frag.spv");
+    vk::raii::ShaderModule vertShaderModule = createShaderModule("shader.vert.spv");
+    vk::raii::ShaderModule fragShaderModule = createShaderModule("shader.frag.spv");
 
     vk::PipelineShaderStageCreateInfo vertShaderStageInfo({}, vk::ShaderStageFlagBits::eVertex,
                                                           *vertShaderModule, "main");
@@ -208,7 +324,10 @@ void Renderer::createGraphicsPipeline() {
     std::array<vk::PipelineShaderStageCreateInfo, 2> shaderStages{vertShaderStageInfo,
                                                                   fragShaderStageInfo};
 
-    vk::PipelineVertexInputStateCreateInfo vertexInputInfo({}, 0, nullptr, 0, nullptr);
+    auto attributeDescriptions = gltf::Vertex::attributeDescriptions();
+    auto bindingDescription = gltf::Vertex::bindingDescription();
+    vk::PipelineVertexInputStateCreateInfo vertexInputInfo(
+        {}, 1, &bindingDescription, attributeDescriptions.size(), attributeDescriptions.data());
 
     vk::PipelineInputAssemblyStateCreateInfo inputAssemblyInfo(
         {}, vk::PrimitiveTopology::eTriangleList, VK_FALSE);
@@ -222,7 +341,7 @@ void Renderer::createGraphicsPipeline() {
     rasterizeInfo.polygonMode = vk::PolygonMode::eFill;
     rasterizeInfo.lineWidth = 1.0f;
     rasterizeInfo.cullMode = vk::CullModeFlagBits::eBack;
-    rasterizeInfo.frontFace = vk::FrontFace::eClockwise;
+    rasterizeInfo.frontFace = vk::FrontFace::eCounterClockwise;
 
     vk::PipelineMultisampleStateCreateInfo multisamplingInfo({}, vk::SampleCountFlagBits::e1,
                                                              false);
@@ -248,40 +367,23 @@ void Renderer::createGraphicsPipeline() {
 
     vk::PipelineDynamicStateCreateInfo dynamicStateInfo({}, dynamicStates);
 
-    vk::PipelineLayoutCreateInfo pipelineLayoutInfo({}, 0, 0);
-    layout_ = device_.handle().createPipelineLayout(pipelineLayoutInfo);
+    vk::PipelineLayoutCreateInfo pipelineLayoutInfo({}, 1, &(*descriptorSetLayout_));
+    layout_ = device_->createPipelineLayout(pipelineLayoutInfo);
 
     vk::GraphicsPipelineCreateInfo pipelineInfo(
         {}, 2, shaderStages.data(), &vertexInputInfo, &inputAssemblyInfo, nullptr,
         &viewportStateInfo, &rasterizeInfo, &multisamplingInfo, nullptr, &colorBlending,
         &dynamicStateInfo, *layout_, *renderPass_, 0);
 
-    pipeline_ = device_.handle().createGraphicsPipeline(nullptr, pipelineInfo);
+    pipeline_ = device_->createGraphicsPipeline(nullptr, pipelineInfo);
 }
 
 vk::raii::ShaderModule Renderer::createShaderModule(const std::string& filename) {
-    auto code = pResourceManager_->readFile(filename);
+    auto code = pResourceManager_->loadShaderBinary(filename);
     vk::ShaderModuleCreateInfo shaderInfo(vk::ShaderModuleCreateFlags(), code.size(),
                                           reinterpret_cast<const uint32_t*>(code.data()));
-    return device_.handle().createShaderModule(shaderInfo);
-}
 
-void Renderer::createCommandBuffers() {
-    vk::CommandBufferAllocateInfo allocInfo;
-    allocInfo.level = vk::CommandBufferLevel::ePrimary;
-    allocInfo.commandBufferCount = config_.maxFramesInFlight;
-    commandBuffers_ = device_.allocateCommandBuffers(allocInfo);
-}
-
-void Renderer::createSyncObjects() {
-    vk::SemaphoreCreateInfo semaphoreInfo;
-    vk::FenceCreateInfo fenceInfo(vk::FenceCreateFlagBits::eSignaled);
-
-    for (int i = 0; i < config_.maxFramesInFlight; i++) {
-        inflightFences_.push_back(device_.handle().createFence(fenceInfo));
-        renderFinishedSemaphores_.push_back(device_.handle().createSemaphore(semaphoreInfo));
-        imageAvaliableSemaphores_.push_back(device_.handle().createSemaphore(semaphoreInfo));
-    }
+    return device_->createShaderModule(shaderInfo);
 }
 
 }  // namespace W3D

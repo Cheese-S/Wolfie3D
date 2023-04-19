@@ -11,11 +11,6 @@
 
 #include "device.hpp"
 #include "instance.hpp"
-#include "vulkan/vulkan_core.h"
-#include "vulkan/vulkan_enums.hpp"
-#include "vulkan/vulkan_handles.hpp"
-#include "vulkan/vulkan_raii.hpp"
-#include "vulkan/vulkan_structs.hpp"
 #include "window.hpp"
 
 namespace W3D {

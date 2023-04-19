@@ -3,6 +3,7 @@
 #include "renderer.hpp"
 #include "resource_manager.hpp"
 #include "window.hpp"
+
 namespace W3D {
 class Application {
    public:

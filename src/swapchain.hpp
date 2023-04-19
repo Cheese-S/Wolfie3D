@@ -6,15 +6,12 @@
 #include <vector>
 
 #include "common.hpp"
-#include "device.hpp"
-#include "instance.hpp"
-#include "vulkan/vulkan_enums.hpp"
-#include "vulkan/vulkan_handles.hpp"
-#include "vulkan/vulkan_raii.hpp"
-#include "vulkan/vulkan_structs.hpp"
-#include "window.hpp"
 
 namespace W3D {
+class Instance;
+class Device;
+class Window;
+
 class Swapchain {
    public:
     Swapchain(Instance* pInstance, Device* pDevice, Window* pWindow);

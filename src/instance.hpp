@@ -9,16 +9,13 @@
 #include <vector>
 
 #include "common.hpp"
-#include "vulkan/vulkan_core.h"
-#include "vulkan/vulkan_enums.hpp"
-#include "vulkan/vulkan_raii.hpp"
-#include "vulkan/vulkan_structs.hpp"
-#include "window.hpp"
 
 extern const std::vector<const char*> VALIDATION_LAYERS;
 extern const std::vector<const char*> DEVICE_EXTENSIONS;
 
 namespace W3D {
+class Window;
+
 struct QueueFamilyIndices {
     std::optional<uint32_t> graphicsFamily;
     std::optional<uint32_t> presentFamily;
@@ -45,12 +42,14 @@ class Instance {
 
     void createInstance();
 
-    const vk::raii::Instance& instance() const;
-    const vk::raii::PhysicalDevice& physicalDevice() const;
-    const vk::raii::SurfaceKHR& surface() const;
-    const SwapchainSupportDetails swapchainSupportDetails() const;
-    QueueFamilyIndices queueFamilyIndices() const;
-    const std::set<uint32_t>& uniqueQueueFamilies() const;
+    const vk::raii::Instance& handle() const { return instance_; };
+    const vk::raii::PhysicalDevice& physicalDevice() const { return physicalDevice_; };
+    const vk::raii::SurfaceKHR& surface() const { return surface_; };
+    QueueFamilyIndices queueFamilyIndices() const { return indices_; };
+    const std::set<uint32_t>& uniqueQueueFamilies() const { return uniqueQueueFamilies_; };
+    const SwapchainSupportDetails swapchainSupportDetails() const {
+        return queryPhysicalDeviceSwapchainSupport(physicalDevice_);
+    };
 
    private:
     void populateDebugMessengerCreateInfo(vk::DebugUtilsMessengerCreateInfoEXT& createInfo);
@@ -68,11 +67,11 @@ class Instance {
     SwapchainSupportDetails queryPhysicalDeviceSwapchainSupport(
         const vk::raii::PhysicalDevice& device) const;
 
-    std::unique_ptr<vk::raii::Context> context_;
-    std::unique_ptr<vk::raii::Instance> instance_;
-    std::unique_ptr<vk::raii::DebugUtilsMessengerEXT> debugMessenger_;
-    std::unique_ptr<vk::raii::SurfaceKHR> surface_;
-    std::unique_ptr<vk::raii::PhysicalDevice> physicalDevice_;
+    vk::raii::Context context_;
+    vk::raii::Instance instance_ = nullptr;
+    vk::raii::DebugUtilsMessengerEXT debugMessenger_ = nullptr;
+    vk::raii::SurfaceKHR surface_ = nullptr;
+    vk::raii::PhysicalDevice physicalDevice_ = nullptr;
     QueueFamilyIndices indices_;
     std::set<uint32_t> uniqueQueueFamilies_;
 };

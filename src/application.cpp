@@ -1,6 +1,7 @@
 #include "application.hpp"
 
 #include "common.hpp"
+#include "model.hpp"
 #include "renderer.hpp"
 #include "vulkan/vulkan_core.h"
 #include "vulkan/vulkan_enums.hpp"

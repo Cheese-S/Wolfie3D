@@ -3,13 +3,14 @@
 #include <memory>
 
 #include "common.hpp"
-#include "instance.hpp"
-#include "vulkan/vulkan_core.h"
-#include "vulkan/vulkan_enums.hpp"
 #include "vulkan/vulkan_raii.hpp"
-#include "vulkan/vulkan_structs.hpp"
 
 namespace W3D {
+namespace DeviceMemory {
+class Buffer;
+}
+class Instance;
+
 class Device {
    public:
     Device(Instance* pInstance);
@@ -19,18 +20,24 @@ class Device {
         vk::CommandBufferAllocateInfo& allocInfo);
     vk::Result presentKHR(const vk::PresentInfoKHR& presentInfo);
 
-    const vk::raii::Device& handle() const;
-    const vk::raii::Queue& graphicsQueue() const;
-    const vk::raii::Queue& presentQueue() const;
-    const vk::raii::Queue& computeQueue() const;
+    void transferBuffer(DeviceMemory::Buffer* src, DeviceMemory::Buffer* dst,
+                        const vk::BufferCopy& copyRegion);
+    vk::raii::CommandBuffer beginOneTimeCommands();
+    void endOneTimeCommands(vk::raii::CommandBuffer& commandBuffer);
+
+    vk::raii::Device* operator->() { return &device_; }
+    const vk::raii::Device& handle() const { return device_; };
+    const vk::raii::Queue& graphicsQueue() const { return graphicsQueue_; };
+    const vk::raii::Queue& presentQueue() const { return presentQueue_; };
+    const vk::raii::Queue& computeQueue() const { return computeQueue_; };
 
    private:
     void createCommandPool();
     Instance* pInstance_;
-    std::unique_ptr<vk::raii::Device> device_;
-    std::unique_ptr<vk::raii::Queue> graphicsQueue_;
-    std::unique_ptr<vk::raii::Queue> presentQueue_;
-    std::unique_ptr<vk::raii::Queue> computeQueue_;
+    vk::raii::Device device_ = nullptr;
+    vk::raii::Queue graphicsQueue_ = nullptr;
+    vk::raii::Queue presentQueue_ = nullptr;
+    vk::raii::Queue computeQueue_ = nullptr;
     vk::raii::CommandPool commandPool_ = nullptr;
 };
 }  // namespace W3D

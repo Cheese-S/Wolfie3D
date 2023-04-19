@@ -2,23 +2,55 @@
 
 #include <memory>
 
-#define VMA_IMPLEMENTATION
-#define VMA_VULKAN_VERSION 1002000
+#include "vulkan/vulkan_core.h"
 
 // Macros used to disable irrelevant warnings
 // see https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator/issues/283
-#pragma clang dianostic push
+#ifdef __clang__
+#pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wnullability-completeness"
+#endif
+
 #include <vk_mem_alloc.h>
-#pragma clang dianostic pop
+
+#ifdef __clang__
+#pragma clang diagnostic pop
+#endif
 
 #include "common.hpp"
-#include "device.hpp"
-#include "instance.hpp"
-#include "vulkan/vulkan_core.h"
-#include "vulkan/vulkan_structs.hpp"
+
+namespace W3D {
+class Device;
+class Instance;
+}  // namespace W3D
 
 namespace W3D::DeviceMemory {
+
+class Buffer;
+class Image;
+
+class Allocator {
+    friend class Object;
+
+   public:
+    Allocator(const Instance& instance, const Device& device);
+    ~Allocator();
+    Allocator() = delete;
+    Allocator(Allocator const&) = delete;
+    void operator=(Allocator const&) = delete;
+
+    std::unique_ptr<Buffer> allocateStagingBuffer(size_t size);
+    std::unique_ptr<Buffer> allocateVertexBuffer(size_t size);
+    std::unique_ptr<Buffer> allocateIndexBuffer(size_t size);
+    std::unique_ptr<Buffer> allocateUniformBuffer(size_t size);
+    std::unique_ptr<Buffer> allocateBuffer(vk::BufferCreateInfo& bufferCreateInfo,
+                                           VmaAllocationCreateInfo& allocCreateInfo);
+    std::unique_ptr<Image> allocateImage(vk::ImageCreateInfo& imageCreateInfo,
+                                         VmaAllocationCreateInfo& allocCreateInfo);
+
+   private:
+    VmaAllocator allocator_;
+};
 
 class Object {
     friend class Allocator;
@@ -28,6 +60,8 @@ class Object {
     Object() = delete;
     Object(Object const&) = delete;
     void operator=(Object const&) = delete;
+
+    inline bool isHostVisible() { return flags_ & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT; }
 
    protected:
     Object(VmaAllocator& allocator);
@@ -41,7 +75,7 @@ class Object {
     VkMemoryPropertyFlags flags_;
 };
 
-class Buffer : Object {
+class Buffer : public Object {
     friend class Allocator;
 
    public:
@@ -50,12 +84,16 @@ class Buffer : Object {
     Buffer(Buffer const&) = delete;
     void operator=(Buffer const&) = delete;
 
+    inline void* mappedData() { return allocationInfo_.pMappedData; }
+    inline VkBuffer handle() { return buffer_; }
+
    private:
-    Buffer(VmaAllocator& allocator, vk::BufferCreateInfo& bufferCreateInfo);
+    Buffer(VmaAllocator& allocator, vk::BufferCreateInfo& bufferCreateInfo,
+           VmaAllocationCreateInfo& allocationInfo);
     VkBuffer buffer_;
 };
 
-class Image : Object {
+class Image : public Object {
     friend class Allocator;
 
    public:
@@ -65,25 +103,9 @@ class Image : Object {
     void operator=(Image const&) = delete;
 
    private:
-    Image(VmaAllocator& allocator, vk::ImageCreateInfo& imageCreateInfo);
+    Image(VmaAllocator& allocator, vk::ImageCreateInfo& imageCreateInfo,
+          VmaAllocationCreateInfo& allocationInfo);
     VkImage image_;
-};
-
-class Allocator {
-    friend class Object;
-
-   public:
-    Allocator(const Instance& instance, const Device& device);
-    ~Allocator();
-    Allocator() = delete;
-    Allocator(Allocator const&) = delete;
-    void operator=(Allocator const&) = delete;
-
-    std::unique_ptr<Buffer> allocateBuffer(vk::BufferCreateInfo& bufferCreateInfo);
-    std::unique_ptr<Image> allocateImage(vk::ImageCreateInfo& imageCreateInfo);
-
-   private:
-    VmaAllocator allocator_;
 };
 
 }  // namespace W3D::DeviceMemory

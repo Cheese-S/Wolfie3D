@@ -15,15 +15,12 @@
 #include "common.hpp"
 #include "vulkan/vulkan_core.h"
 #include "vulkan/vulkan_enums.hpp"
-#include "vulkan/vulkan_handles.hpp"
-#include "vulkan/vulkan_raii.hpp"
-#include "vulkan/vulkan_structs.hpp"
 #include "window.hpp"
 
 #ifdef NDEBUG
-const bool ENABLE_VALIDATION_LAYERS = false;
+constexpr const bool ENABLE_VALIDATION_LAYERS = false;
 #else
-const bool ENABLE_VALIDATION_LAYERS = true;
+constexpr const bool ENABLE_VALIDATION_LAYERS = true;
 #endif
 
 const std::vector<const char*> VALIDATION_LAYERS = {"VK_LAYER_KHRONOS_validation"};
@@ -72,26 +69,10 @@ Instance::Instance(Window* pWindow) {
     pickPhysicalDevice();
 }
 
-const vk::raii::Instance& Instance::instance() const { return *instance_; };
-
-const vk::raii::SurfaceKHR& Instance::surface() const { return *surface_; }
-
-const vk::raii::PhysicalDevice& Instance::physicalDevice() const { return *physicalDevice_; };
-
-const SwapchainSupportDetails Instance::swapchainSupportDetails() const {
-    return queryPhysicalDeviceSwapchainSupport(*physicalDevice_);
-};
-
-QueueFamilyIndices Instance::queueFamilyIndices() const { return indices_; }
-
-const std::set<uint32_t>& Instance::uniqueQueueFamilies() const { return uniqueQueueFamilies_; };
-
 void Instance::createInstance() {
     if (ENABLE_VALIDATION_LAYERS && !isValidationLayerSupported()) {
         throw std::runtime_error("validation layers requested, but not avaliable!");
     };
-
-    context_ = std::make_unique<vk::raii::Context>();
 
     vk::ApplicationInfo appInfo{};
 
@@ -101,12 +82,14 @@ void Instance::createInstance() {
     appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
     appInfo.apiVersion = VK_API_VERSION_1_2;
 
-    vk::InstanceCreateInfo createInfo({}, &appInfo);
+    vk::InstanceCreateInfo createInfo({vk::InstanceCreateFlagBits::eEnumeratePortabilityKHR},
+                                      &appInfo);
 
     std::vector<const char*> extensions;
     if (ENABLE_VALIDATION_LAYERS) {
         extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
     }
+    extensions.push_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
     Window::getRequiredExtensions(extensions);
     createInfo.enabledExtensionCount = extensions.size();
     createInfo.ppEnabledExtensionNames = extensions.data();
@@ -122,7 +105,7 @@ void Instance::createInstance() {
         createInfo.pNext = nullptr;
     }
 
-    instance_ = std::make_unique<vk::raii::Instance>(*context_, createInfo);
+    instance_ = vk::raii::Instance(context_, createInfo);
 
     if (ENABLE_VALIDATION_LAYERS) {
         initDebugMessenger();
@@ -132,8 +115,7 @@ void Instance::createInstance() {
 void Instance::initDebugMessenger() {
     vk::DebugUtilsMessengerCreateInfoEXT debugCreateInfo;
     populateDebugMessengerCreateInfo(debugCreateInfo);
-    debugMessenger_ =
-        std::make_unique<vk::raii::DebugUtilsMessengerEXT>(*instance_, debugCreateInfo);
+    debugMessenger_ = vk::raii::DebugUtilsMessengerEXT(instance_, debugCreateInfo);
 }
 
 void Instance::populateDebugMessengerCreateInfo(vk::DebugUtilsMessengerCreateInfoEXT& createInfo) {
@@ -157,32 +139,30 @@ inline VKAPI_ATTR VkBool32 VKAPI_CALL Instance::debugCallback(
 void Instance::createSurface(Window* pWindow) {
     VkSurfaceKHR surface;
     auto window_handle = pWindow->handle();
-    if (glfwCreateWindowSurface(**instance_, window_handle, nullptr, &surface) != VK_SUCCESS) {
+    if (glfwCreateWindowSurface(*instance_, window_handle, nullptr, &surface) != VK_SUCCESS) {
         throw std::runtime_error("failed to create window surface!");
     }
-    surface_ = std::make_unique<vk::raii::SurfaceKHR>(*instance_, surface);
+    surface_ = vk::raii::SurfaceKHR(instance_, surface);
 }
 
 void Instance::pickPhysicalDevice() {
-    auto physicalDevices = instance_->enumeratePhysicalDevices();
+    auto physicalDevices = instance_.enumeratePhysicalDevices();
     if (!physicalDevices.size()) {
         throw std::runtime_error("failed to find GPUs with Vulkan Support");
     }
 
     for (auto& device : physicalDevices) {
         if (isPhysicalDeviceSuitable(device)) {
-            physicalDevice_ = std::make_unique<vk::raii::PhysicalDevice>(std::move(device));
-            indices_ = findQueueFamilies(*physicalDevice_);
+            physicalDevice_ = vk::raii::PhysicalDevice(std::move(device));
+            indices_ = findQueueFamilies(physicalDevice_);
             uniqueQueueFamilies_.emplace(indices_.computeFamily.value());
             uniqueQueueFamilies_.emplace(indices_.graphicsFamily.value());
             uniqueQueueFamilies_.emplace(indices_.presentFamily.value());
-            break;
+            return;
         }
     }
 
-    if (!physicalDevice_) {
-        throw std::runtime_error("failed to find a suitable GPU!");
-    }
+    throw std::runtime_error("failed to find a suitable GPU!");
 }
 
 bool Instance::isPhysicalDeviceSuitable(const vk::raii::PhysicalDevice& device) {
@@ -210,9 +190,9 @@ bool Instance::checkPhysicalDeviceExtensionSupport(const vk::raii::PhysicalDevic
 SwapchainSupportDetails Instance::queryPhysicalDeviceSwapchainSupport(
     const vk::raii::PhysicalDevice& device) const {
     SwapchainSupportDetails details;
-    details.capabilities = device.getSurfaceCapabilitiesKHR(**surface_);
-    details.formats = device.getSurfaceFormatsKHR(**surface_);
-    details.presentModes = device.getSurfacePresentModesKHR(**surface_);
+    details.capabilities = device.getSurfaceCapabilitiesKHR(*surface_);
+    details.formats = device.getSurfaceFormatsKHR(*surface_);
+    details.presentModes = device.getSurfacePresentModesKHR(*surface_);
     return details;
 }
 
@@ -229,7 +209,7 @@ QueueFamilyIndices Instance::findQueueFamilies(const vk::raii::PhysicalDevice& d
             indices.computeFamily = i;
         }
 
-        auto isPresentSupported = device.getSurfaceSupportKHR(i, **surface_);
+        auto isPresentSupported = device.getSurfaceSupportKHR(i, *surface_);
 
         if (isPresentSupported) {
             indices.presentFamily = i;
