@@ -26,17 +26,17 @@ class Renderer {
         vk::SampleCountFlagBits mssaSamples;
         int maxFramesInFlight;
     };
+
     Renderer(ResourceManager* pResourceManager, Window* pWindow, Config config);
     ~Renderer();
     void drawFrame();
 
    private:
     void updateUniformBuffer();
-    void recordCommandBuffer(const vk::raii::CommandBuffer& commandBuffer, uint32_t imageIndex);
+    void recordDrawCommands(const vk::raii::CommandBuffer& commandBuffer, uint32_t imageIndex);
 
     void initVulkan();
     void createRenderPass();
-    vk::Format findDepthFormat();
     void createDescriptorSetLayout();
     void createDescriptorPool();
 
@@ -65,20 +65,15 @@ class Renderer {
         std::unique_ptr<DeviceMemory::Buffer> uniformBuffer = nullptr;
     };
 
-    struct AttachmentResource {
-        std::unique_ptr<DeviceMemory::Image> image;
-        vk::raii::ImageView view;
-    };
-
     inline const FrameResource& currentFrame() { return frameResources_[currentFrameIdx_]; }
 
+    Config config_;
     ResourceManager* pResourceManager_;
     Window* pWindow_;
     Instance instance_;
     Device device_;
-    Swapchain swapchain_;
     DeviceMemory::Allocator allocator_;
-    Config config_;
+    Swapchain swapchain_;
     vk::raii::RenderPass renderPass_ = nullptr;
     vk::raii::DescriptorSetLayout descriptorSetLayout_ = nullptr;
     vk::raii::DescriptorPool descriptorPool_ = nullptr;

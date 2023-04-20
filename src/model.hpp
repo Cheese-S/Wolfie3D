@@ -55,6 +55,7 @@ class Model {
     ~Model();
     const VkBuffer vertexBufferHandle();
     const VkBuffer indexBufferHandle();
+    inline uint32_t getIndexCount() { return indexCount_; }
 
    private:
     struct Loader {
@@ -76,8 +77,7 @@ class Model {
 
     Loader createLoader(const tinygltf::Scene& scene, const tinygltf::Model& model);
 
-    void getNodeProps(const tinygltf::Node& node, const tinygltf::Model& model, size_t& vertexCount,
-                      size_t& indexCount);
+    void countNodeSize(const tinygltf::Node& node, const tinygltf::Model& model);
 
     std::unique_ptr<Node> loadNode(uint32_t idx, Node* pParent, const tinygltf::Model& model,
                                    Loader& loader);
@@ -124,6 +124,8 @@ class Model {
     std::vector<std::unique_ptr<Node>> roots_;
     std::unique_ptr<DeviceMemory::Buffer> vertexBuffer_;
     std::unique_ptr<DeviceMemory::Buffer> indexBuffer_;
+    uint32_t vertexCount_;
+    uint32_t indexCount_;
 };
 
 struct Node {
@@ -144,7 +146,7 @@ struct Primitive {
     uint32_t idxCount;
     uint32_t vertexCount;
 };
-
+// TODO: Use vec3 for pos
 struct Vertex {
     glm::vec4 pos;
     glm::vec4 color;

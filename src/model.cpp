@@ -28,7 +28,8 @@ const VkBuffer Model::indexBufferHandle() { return indexBuffer_->handle(); }
 
 const VkBuffer Model::vertexBufferHandle() { return vertexBuffer_->handle(); }
 
-Model::Model(tinygltf::Model& raw, Device* pDevice, DeviceMemory::Allocator* pAllocator) {
+Model::Model(tinygltf::Model& raw, Device* pDevice, DeviceMemory::Allocator* pAllocator)
+    : vertexCount_(0), indexCount_(0) {
     const tinygltf::Scene& scene = raw.scenes[raw.defaultScene != -1 ? raw.defaultScene : 0];
     Loader loader = createLoader(scene, raw);
     for (auto nodeIdx : scene.nodes) {
@@ -39,12 +40,12 @@ Model::Model(tinygltf::Model& raw, Device* pDevice, DeviceMemory::Allocator* pAl
 
 void Model::createVertexAndIndexBuffer(const Loader& loader, Device* pDevice,
                                        DeviceMemory::Allocator* pAllocator) {
-    size_t vertexBufferSize = loader.vertexPos * sizeof(Vertex);
+    size_t vertexBufferSize = vertexCount_ * sizeof(Vertex);
     auto pVertexStagingBuffer = pAllocator->allocateStagingBuffer(vertexBufferSize);
     memcpy(pVertexStagingBuffer->mappedData(), loader.vertexBuffer.get(), vertexBufferSize);
     vertexBuffer_ = pAllocator->allocateVertexBuffer(vertexBufferSize);
 
-    size_t indexBufferSize = loader.indexPos * sizeof(uint32_t);
+    size_t indexBufferSize = indexCount_ * sizeof(uint32_t);
     auto pIndexStagingBuffer = pAllocator->allocateStagingBuffer(indexBufferSize);
     memcpy(pIndexStagingBuffer->mappedData(), loader.indexBuffer.get(), indexBufferSize);
     indexBuffer_ = pAllocator->allocateIndexBuffer(indexBufferSize);
@@ -66,30 +67,28 @@ void Model::createVertexAndIndexBuffer(const Loader& loader, Device* pDevice,
 
 Model::Loader Model::createLoader(const tinygltf::Scene& scene, const tinygltf::Model& model) {
     Loader loader;
-    size_t vertexCount = 0, indexCount = 0;
     for (auto& nodeIdx : scene.nodes) {
-        getNodeProps(model.nodes[nodeIdx], model, vertexCount, indexCount);
+        countNodeSize(model.nodes[nodeIdx], model);
     }
-    loader.vertexBuffer = std::make_unique<Vertex[]>(vertexCount);
-    loader.indexBuffer = std::make_unique<uint32_t[]>(indexCount);
+    loader.vertexBuffer = std::make_unique<Vertex[]>(vertexCount_);
+    loader.indexBuffer = std::make_unique<uint32_t[]>(indexCount_);
     return loader;
 }
 
-void Model::getNodeProps(const tinygltf::Node& node, const tinygltf::Model& model,
-                         size_t& vertexCount, size_t& indexCount) {
+void Model::countNodeSize(const tinygltf::Node& node, const tinygltf::Model& model) {
     if (node.mesh != -1) {
         const tinygltf::Mesh& mesh = model.meshes[node.mesh];
         for (auto& primitive : mesh.primitives) {
             //* Note: POSITION is required for all vertex
-            vertexCount += model.accessors[primitive.attributes.find("POSITION")->second].count;
+            vertexCount_ += model.accessors[primitive.attributes.find("POSITION")->second].count;
             if (primitive.indices != -1) {
-                indexCount += model.accessors[primitive.indices].count;
+                indexCount_ += model.accessors[primitive.indices].count;
             }
         }
     }
 
     for (auto childIdx : node.children) {
-        getNodeProps(model.nodes[childIdx], model, vertexCount, indexCount);
+        countNodeSize(model.nodes[childIdx], model);
     }
 }
 

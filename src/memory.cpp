@@ -72,6 +72,15 @@ std::unique_ptr<Buffer> Allocator::allocateUniformBuffer(size_t size) {
     return allocateBuffer(bufferCreateInfo, allocCreateInfo);
 }
 
+std::unique_ptr<Image> Allocator::allocateAttachmentImage(vk::ImageCreateInfo& imageCreateInfo) {
+    VmaAllocationCreateInfo allocCreateInfo = {};
+    allocCreateInfo.usage = VMA_MEMORY_USAGE_AUTO;
+    allocCreateInfo.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT;
+    allocCreateInfo.priority = 1.0f;
+
+    return allocateImage(imageCreateInfo, allocCreateInfo);
+}
+
 std::unique_ptr<Image> Allocator::allocateImage(vk::ImageCreateInfo& imageCreateInfo,
                                                 VmaAllocationCreateInfo& allocCreateInfo) {
     return std::unique_ptr<Image>(new Image(allocator_, imageCreateInfo, allocCreateInfo));

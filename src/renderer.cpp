@@ -29,13 +29,13 @@
 
 namespace W3D {
 Renderer::Renderer(ResourceManager* pResourceManager, Window* pWindow, Config config)
-    : pResourceManager_(pResourceManager),
+    : config_(config),
+      pResourceManager_(pResourceManager),
       pWindow_(pWindow),
       instance_(pWindow),
       device_(&instance_),
-      swapchain_(&instance_, &device_, pWindow_),
       allocator_(instance_, device_),
-      config_(config) {
+      swapchain_(&instance_, &device_, pWindow_, &allocator_, config_.mssaSamples) {
     initVulkan();
 }
 
@@ -56,7 +56,7 @@ void Renderer::drawFrame() {
     updateUniformBuffer();
     device_handle_.resetFences({*currentFrame.inflightFence});
     currentFrame.commandBuffer.reset();
-    recordCommandBuffer(currentFrame.commandBuffer, imageIndex);
+    recordDrawCommands(currentFrame.commandBuffer, imageIndex);
 
     vk::SubmitInfo submitInfo;
     std::array<vk::Semaphore, 1> waitSemaphores{*currentFrame.imageAvaliableSemaphore};
@@ -90,8 +90,8 @@ void Renderer::drawFrame() {
     currentFrameIdx_ = (currentFrameIdx_ + 1) % config_.maxFramesInFlight;
 }
 
-void Renderer::recordCommandBuffer(const vk::raii::CommandBuffer& commandBuffer,
-                                   uint32_t imageIndex) {
+void Renderer::recordDrawCommands(const vk::raii::CommandBuffer& commandBuffer,
+                                  uint32_t imageIndex) {
     vk::CommandBufferBeginInfo beginInfo;
 
     commandBuffer.begin(beginInfo);
@@ -100,9 +100,11 @@ void Renderer::recordCommandBuffer(const vk::raii::CommandBuffer& commandBuffer,
     vk::RenderPassBeginInfo renderPassInfo(*renderPass_, *framebuffers[imageIndex],
                                            {{0, 0}, swapchain_.extent()});
 
-    vk::ClearValue clearColor(std::array<float, 4>{0.0f, 0.0f, 0.0f, 1.0f});
-    renderPassInfo.clearValueCount = 1;
-    renderPassInfo.setClearValues(clearColor);
+    std::array<vk::ClearValue, 2> clearValues;
+    clearValues[0].color = std::array<float, 4>{0.0f, 0.0f, 0.0f, 1.0f};
+    clearValues[1].depthStencil = vk::ClearDepthStencilValue{1.0f, 0};
+    renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
+    renderPassInfo.setClearValues(clearValues);
 
     commandBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
     commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline_);
@@ -117,8 +119,7 @@ void Renderer::recordCommandBuffer(const vk::raii::CommandBuffer& commandBuffer,
     commandBuffer.setScissor(0, scissor);
     commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *layout_, 0,
                                      {*currentFrame().descriptorSet}, {});
-
-    commandBuffer.draw(6, 1, 0, 0);
+    commandBuffer.drawIndexed(pModel_->getIndexCount(), 1, 0, 0, 0);
     commandBuffer.endRenderPass();
 
     commandBuffer.end();
@@ -146,6 +147,8 @@ void Renderer::updateUniformBuffer() {
         memcpy(pUniformBuffer->mappedData(), &ubo, sizeof(ubo));
     } else {
         auto pStagingBuffer = allocator_.allocateStagingBuffer(sizeof(ubo));
+        memcpy(pStagingBuffer->mappedData(), &ubo, sizeof(ubo));
+        pStagingBuffer->flush();
         vk::BufferCopy copyRegion(0, 0, sizeof(ubo));
         device_.transferBuffer(pStagingBuffer.get(), pUniformBuffer.get(), copyRegion);
     }
@@ -180,21 +183,39 @@ void Renderer::createRenderPass() {
 
     vk::AttachmentReference colorAttachmentRef(0, vk::ImageLayout::eColorAttachmentOptimal);
 
+    vk::AttachmentDescription depthAttachment;
+    depthAttachment.format = swapchain_.findDepthFormat();
+    depthAttachment.samples = config_.mssaSamples;
+    depthAttachment.loadOp = vk::AttachmentLoadOp::eClear;
+    depthAttachment.storeOp = vk::AttachmentStoreOp::eDontCare;
+    depthAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
+    depthAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
+    depthAttachment.initialLayout = vk::ImageLayout::eUndefined;
+    depthAttachment.finalLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+
+    vk::AttachmentReference depthAttachmentRef(1, vk::ImageLayout::eDepthStencilAttachmentOptimal);
+
+    std::array<vk::AttachmentDescription, 2> attachments = {colorAttachment, depthAttachment};
+
     vk::SubpassDescription subpass;
     subpass.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
     subpass.colorAttachmentCount = 1;
     subpass.pColorAttachments = &colorAttachmentRef;
+    subpass.pDepthStencilAttachment = &depthAttachmentRef;
 
     vk::SubpassDependency dependency;
     dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
     dependency.dstSubpass = 0;
-    dependency.srcStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+    dependency.srcStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput |
+                              vk::PipelineStageFlagBits::eEarlyFragmentTests;
     dependency.srcAccessMask = {};
-    dependency.dstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-    dependency.dstAccessMask =
-        vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite;
+    dependency.dstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput |
+                              vk::PipelineStageFlagBits::eEarlyFragmentTests;
+    dependency.dstAccessMask = vk::AccessFlagBits::eColorAttachmentRead |
+                               vk::AccessFlagBits::eColorAttachmentWrite |
+                               vk::AccessFlagBits::eDepthStencilAttachmentWrite;
 
-    vk::RenderPassCreateInfo renderPassInfo({}, 1, &colorAttachment, 1, &subpass, 1, &dependency);
+    vk::RenderPassCreateInfo renderPassInfo({}, 2, attachments.data(), 1, &subpass, 1, &dependency);
     renderPass_ = device_->createRenderPass(renderPassInfo);
 
     // vk::AttachmentDescription colorAttachmentResolve;
@@ -208,40 +229,13 @@ void Renderer::createRenderPass() {
     // colorAttachmentResolve.finalLayout = vk::ImageLayout::ePresentSrcKHR;
     // vk::AttachmentReference colorAttachmentResolveRef(1, vk::ImageLayout::eAttachmentOptimal);
 
-    // vk::AttachmentDescription depthAttachment;
-    // depthAttachment.format = findDepthFormat();
-    // depthAttachment.samples = config_.mssaSamples;
-    // depthAttachment.loadOp = vk::AttachmentLoadOp::eClear;
-    // depthAttachment.storeOp = vk::AttachmentStoreOp::eDontCare;
-    // depthAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-    // depthAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-    // depthAttachment.initialLayout = vk::ImageLayout::eUndefined;
-    // depthAttachment.finalLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
-    // vk::AttachmentReference depthAttachmentRef(2, vk::ImageLayout::eDepthAttachmentOptimal);
-
     // vk::SubpassDescription subpass(vk::SubpassDescriptionFlags(),
     // vk::PipelineBindPoint::eGraphics,
     //                                0, nullptr, 1, &colorAttachmentRef,
     //                                &colorAttachmentResolveRef, &depthAttachmentRef);
 
-    // std::array<vk::AttachmentDescription, 3> attachmentDescriptions = {
-    //     colorAttachment, colorAttachmentResolve, depthAttachment};
-
     // vk::RenderPassCreateInfo renderPassInfo(vk::RenderPassCreateFlags(), attachmentDescriptions,
     //                                         subpass);
-}
-
-vk::Format Renderer::findDepthFormat() {
-    std::array<vk::Format, 3> candidates = {vk::Format::eD32Sfloat, vk::Format::eD32SfloatS8Uint,
-                                            vk::Format::eD24UnormS8Uint};
-    for (auto format : candidates) {
-        vk::FormatProperties properties = instance_.physicalDevice().getFormatProperties(format);
-        if (properties.optimalTilingFeatures & vk::FormatFeatureFlagBits::eDepthStencilAttachment) {
-            return format;
-        }
-    }
-
-    throw std::runtime_error("failed to find supported depth format!");
 }
 
 void Renderer::createDescriptorSetLayout() {
@@ -346,6 +340,9 @@ void Renderer::createGraphicsPipeline() {
     vk::PipelineMultisampleStateCreateInfo multisamplingInfo({}, vk::SampleCountFlagBits::e1,
                                                              false);
 
+    vk::PipelineDepthStencilStateCreateInfo depthStencil{{},    true, true, vk::CompareOp::eLess,
+                                                         false, false};
+
     vk::PipelineColorBlendAttachmentState colorBlendAttachment;
     colorBlendAttachment.blendEnable = false;
     colorBlendAttachment.colorWriteMask =
@@ -372,7 +369,7 @@ void Renderer::createGraphicsPipeline() {
 
     vk::GraphicsPipelineCreateInfo pipelineInfo(
         {}, 2, shaderStages.data(), &vertexInputInfo, &inputAssemblyInfo, nullptr,
-        &viewportStateInfo, &rasterizeInfo, &multisamplingInfo, nullptr, &colorBlending,
+        &viewportStateInfo, &rasterizeInfo, &multisamplingInfo, &depthStencil, &colorBlending,
         &dynamicStateInfo, *layout_, *renderPass_, 0);
 
     pipeline_ = device_->createGraphicsPipeline(nullptr, pipelineInfo);

@@ -11,22 +11,22 @@
 
 #include "device.hpp"
 #include "instance.hpp"
+#include "memory.hpp"
+#include "vulkan/vulkan_enums.hpp"
+#include "vulkan/vulkan_structs.hpp"
 #include "window.hpp"
 
 namespace W3D {
-Swapchain::Swapchain(Instance* pInstance, Device* pDevice, Window* pWindow) {
-    pInstance_ = pInstance;
-    pDevice_ = pDevice;
-    pWindow_ = pWindow;
-
+Swapchain::Swapchain(Instance* pInstance, Device* pDevice, Window* pWindow,
+                     DeviceMemory::Allocator* pAllocator, vk::SampleCountFlagBits mssaSamples)
+    : pInstance_(pInstance),
+      pDevice_(pDevice),
+      pWindow_(pWindow),
+      pAllocator_(pAllocator),
+      mssaSamples_(mssaSamples) {
     createSwapchain();
+    framebuffers_.reserve(imageViews_.size());
 };
-
-const vk::raii::SwapchainKHR& Swapchain::handle() { return *swapchain_; };
-
-const std::vector<vk::raii::Framebuffer>& Swapchain::framebuffers() { return framebuffers_; };
-
-vk::Extent2D Swapchain::extent() { return extent_; };
 
 void Swapchain::recreate() {
     int width = 0, height = 0;
@@ -40,6 +40,8 @@ void Swapchain::recreate() {
 }
 
 void Swapchain::cleanup() {
+    depthResource_.view.clear();
+    depthResource_.pImage.reset();
     framebuffers_.clear();
     imageViews_.clear();
     swapchain_.reset();
@@ -89,6 +91,7 @@ void Swapchain::createSwapchain() {
     swapchain_ = std::make_unique<vk::raii::SwapchainKHR>(pDevice_->handle(), createInfo);
     images_ = swapchain_->getImages();
     createImageViews();
+    createDepthResource();
 }
 
 void Swapchain::chooseSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& formats) {
@@ -140,11 +143,42 @@ void Swapchain::createImageViews() {
     // }
 }
 
+void Swapchain::createDepthResource() {
+    vk::Format depthFormat = findDepthFormat();
+    vk::ImageCreateInfo imageInfo;
+    imageInfo.imageType = vk::ImageType::e2D;
+    imageInfo.extent = vk::Extent3D{extent_.width, extent_.height, 1};
+    imageInfo.mipLevels = 1;
+    imageInfo.arrayLayers = 1;
+    imageInfo.format = depthFormat;
+    imageInfo.tiling = vk::ImageTiling::eOptimal;
+    imageInfo.initialLayout = vk::ImageLayout::eUndefined;
+    imageInfo.usage = vk::ImageUsageFlagBits::eDepthStencilAttachment;
+    imageInfo.sharingMode = vk::SharingMode::eExclusive;
+    imageInfo.samples = mssaSamples_;
+    depthResource_.pImage = pAllocator_->allocateAttachmentImage(imageInfo);
+    depthResource_.view = pDevice_->createImageView(depthResource_.pImage->handle(), depthFormat,
+                                                    vk::ImageAspectFlagBits::eDepth, 1);
+}
+
+vk::Format Swapchain::findDepthFormat() {
+    std::array<vk::Format, 3> candidates = {vk::Format::eD32Sfloat, vk::Format::eD32SfloatS8Uint,
+                                            vk::Format::eD24UnormS8Uint};
+    for (auto format : candidates) {
+        vk::FormatProperties properties = pInstance_->physicalDevice().getFormatProperties(format);
+        if (properties.optimalTilingFeatures & vk::FormatFeatureFlagBits::eDepthStencilAttachment) {
+            return format;
+        }
+    }
+
+    throw std::runtime_error("failed to find supported depth format!");
+}
+
 void Swapchain::createFrameBuffers(vk::raii::RenderPass& renderPass) {
-    framebuffers_.reserve(imageViews_.size());
-    std::array<vk::ImageView, 1> attachments;
+    std::array<vk::ImageView, 2> attachments;
     for (auto const& imageView : imageViews_) {
         attachments[0] = *imageView;
+        attachments[1] = *depthResource_.view;
         vk::FramebufferCreateInfo framebufferCreateInfo({}, *renderPass, attachments, extent_.width,
                                                         extent_.height, 1);
         framebuffers_.emplace_back(pDevice_->handle().createFramebuffer(framebufferCreateInfo));

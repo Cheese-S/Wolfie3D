@@ -45,6 +45,8 @@ class Allocator {
     std::unique_ptr<Buffer> allocateUniformBuffer(size_t size);
     std::unique_ptr<Buffer> allocateBuffer(vk::BufferCreateInfo& bufferCreateInfo,
                                            VmaAllocationCreateInfo& allocCreateInfo);
+
+    std::unique_ptr<Image> allocateAttachmentImage(vk::ImageCreateInfo& imageCreateInfo);
     std::unique_ptr<Image> allocateImage(vk::ImageCreateInfo& imageCreateInfo,
                                          VmaAllocationCreateInfo& allocCreateInfo);
 
@@ -85,6 +87,7 @@ class Buffer : public Object {
     void operator=(Buffer const&) = delete;
 
     inline void* mappedData() { return allocationInfo_.pMappedData; }
+    inline void flush() { vmaFlushAllocation(allocator_, allocation_, 0, VK_WHOLE_SIZE); }
     inline VkBuffer handle() { return buffer_; }
 
    private:
@@ -101,6 +104,8 @@ class Image : public Object {
     Image() = delete;
     Image(Image const&) = delete;
     void operator=(Image const&) = delete;
+
+    inline VkImage handle() { return image_; }
 
    private:
     Image(VmaAllocator& allocator, vk::ImageCreateInfo& imageCreateInfo,
