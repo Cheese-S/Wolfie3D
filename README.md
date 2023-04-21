@@ -6,9 +6,11 @@
   - Make sure it's added to the system path.
 - [Download GLFW](https://www.glfw.org/download.html) (64-bit precompiled binary)
 - [Download GLM](https://github.com/g-truc/glm/releases)
-- Rename "envWindowsExample.cmake" to "windows.env.cmake"
-- Update the filepath variable to your install locations
 
+
+### Build Steps
+- Rename "envWindowsExample.cmake" to "windows.env.cmake"
+  - Update the filepath variable to your install locations
 - In windows powershell
 ```
 cd Wolfie3D
