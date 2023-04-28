@@ -3,12 +3,12 @@
 #include <exception>
 #include <iostream>
 
-#include "application.hpp"
+#include "core/renderer.hpp"
 
 int main() {
-    W3D::Application app;
+    W3D::Renderer renderer;
     try {
-        app.start();
+        renderer.start();
     } catch (const std::exception& e) {
         std::cerr << e.what() << std::endl;
         return EXIT_FAILURE;

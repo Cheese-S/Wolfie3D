@@ -73,6 +73,11 @@ if (NOT TINYGLTF_PATH)
     set(TINYGLTF_PATH external/tinygltf)
 endif()
 
+if (NOT STB_RESIZE_PATH)
+    message(STATUS "STB_RESIZE_PATH not specified in .env.cmake, using external/stb_image_resize")
+    set (STB_RESIZE_PATH external/stb_image_resize)
+endif()
+
 
 if (NOT VMA_PATH)
     message(STATUS "VMA_PATH not specified in .enc.cmake using external/vulkan_memory_allocator")
@@ -106,6 +111,7 @@ if (WIN32)
         ${GLFW_INCLUDE_DIRS}
         ${GLM_PATH}
         ${TINYGLTF_PATH}
+        ${STB_RESIZE_PATH}
         ${VMA_PATH}
     )
 
@@ -120,6 +126,7 @@ elseif (UNIX)
     target_include_directories(${PROJECT_NAME} PUBLIC
         ${PROJECT_SOURCE_DIR}/src
         ${TINYGLTF_PATH}
+        ${STB_RESIZE_PATH}
         ${VMA_PATH}
     )
     target_link_libraries(${PROJECT_NAME} glfw ${Vulkan_LIBRARIES})
