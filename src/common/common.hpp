@@ -6,6 +6,7 @@
 #pragma clang diagnostic ignored "-Wall"
 #endif
 
+
 #include "vulkan/vulkan_core.h"
 #include "vulkan/vulkan_raii.hpp"
 #include "vulkan/vulkan_enums.hpp"

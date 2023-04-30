@@ -17,8 +17,11 @@
 
 #include "common/file_utils.hpp"
 #include "memory.hpp"
+#include "scene_graph/components/image.hpp"
 #include "scene_graph/components/mesh.hpp"
+#include "scene_graph/components/sampler.hpp"
 #include "scene_graph/components/submesh.hpp"
+#include "scene_graph/components/texture.hpp"
 #include "scene_graph/scene.hpp"
 
 namespace W3D {
@@ -27,7 +30,8 @@ Renderer::Renderer(Config config)
       window_(APP_NAME),
       instance_(&window_),
       device_(&instance_),
-      swapchain_(&instance_, &device_, &window_, config_.mssaSamples) {
+      swapchain_(&instance_, &device_, &window_, config_.mssaSamples),
+      descriptor_manager_(device_) {
 }
 
 Renderer::~Renderer() = default;
@@ -137,7 +141,14 @@ void Renderer::recordDrawCommands(const vk::raii::CommandBuffer& commandBuffer,
 
 void Renderer::draw_scene(const vk::raii::CommandBuffer& command_buffer) {
     auto submeshes = pScene_->get_components<SceneGraph::SubMesh>();
-    for (auto& submesh : submeshes) {
+    for (auto submesh : submeshes) {
+        auto set = descriptor_set_map_[dynamic_cast<const SceneGraph::PBRMaterial*>(
+            submesh->get_material())];
+        command_buffer.bindDescriptorSets(
+            vk::PipelineBindPoint::eGraphics, *layout_, 1,
+            {descriptor_set_map_[dynamic_cast<const SceneGraph::PBRMaterial*>(
+                submesh->get_material())]},
+            {});
         command_buffer.bindVertexBuffers(0, {submesh->pVertex_buffer_->handle()}, {0});
         if (submesh->pIndex_buffer_) {
             command_buffer.bindIndexBuffer(submesh->pIndex_buffer_->handle(),
@@ -176,7 +187,6 @@ void Renderer::recreateSwapchain() {
 void Renderer::initVulkan() {
     createRenderPass();
     createDescriptorSetLayout();
-    createDescriptorPool();
     swapchain_.createFrameBuffers(renderPass_);
     createFrameDatas();
     createGraphicsPipeline();
@@ -253,20 +263,18 @@ void Renderer::createRenderPass() {
 }
 
 void Renderer::createDescriptorSetLayout() {
-    vk::DescriptorSetLayoutBinding uboLayoutBinding(0, vk::DescriptorType::eUniformBuffer, 1,
-                                                    vk::ShaderStageFlagBits::eVertex);
-    std::array<vk::DescriptorSetLayoutBinding, 1> bindings = {uboLayoutBinding};
+    vk::DescriptorSetLayoutBinding ubo_layout_binding(0, vk::DescriptorType::eUniformBuffer, 1,
+                                                      vk::ShaderStageFlagBits::eVertex);
+    std::array<vk::DescriptorSetLayoutBinding, 1> bindings = {ubo_layout_binding};
     vk::DescriptorSetLayoutCreateInfo layoutInfo({}, bindings);
-    descriptorSetLayout_ = device_->createDescriptorSetLayout(layoutInfo);
-}
+    descriptor_manager_.layouts[0] =
+        descriptor_manager_.cache.create_descriptor_layout(&layoutInfo);
 
-void Renderer::createDescriptorPool() {
-    std::array<vk::DescriptorPoolSize, 1> poolSizes;
-    poolSizes[0] = {vk::DescriptorType::eUniformBuffer,
-                    static_cast<uint32_t>(config_.maxFramesInFlight)};
-
-    vk::DescriptorPoolCreateInfo poolInfo({}, config_.maxFramesInFlight, poolSizes);
-    descriptorPool_ = device_->createDescriptorPool(poolInfo);
+    vk::DescriptorSetLayoutBinding sampler_binding(1, vk::DescriptorType::eCombinedImageSampler, 1,
+                                                   vk::ShaderStageFlagBits::eFragment);
+    bindings[0] = sampler_binding;
+    descriptor_manager_.layouts[1] =
+        descriptor_manager_.cache.create_descriptor_layout(&layoutInfo);
 }
 
 void Renderer::createFrameDatas() {
@@ -306,17 +314,14 @@ void Renderer::createSyncObjects() {
 }
 
 void Renderer::createDescriptorSets() {
-    std::vector<vk::DescriptorSetLayout> layouts(config_.maxFramesInFlight, *descriptorSetLayout_);
-    vk::DescriptorSetAllocateInfo allocInfo(*descriptorPool_, layouts);
-    auto descriptorSets = (*device_.handle()).allocateDescriptorSets(allocInfo);
     for (int i = 0; i < config_.maxFramesInFlight; i++) {
-        frameResources_[i].descriptorSet = std::move(descriptorSets[i]);
-        vk::DescriptorBufferInfo bufferInfo(frameResources_[i].uniformBuffer->handle(), 0,
-                                            sizeof(UniformBufferObject));
-        std::array<vk::WriteDescriptorSet, 1> descriptorWrites;
-        descriptorWrites[0] = {frameResources_[i].descriptorSet,   0,       0,          1,
-                               vk::DescriptorType::eUniformBuffer, nullptr, &bufferInfo};
-        device_->updateDescriptorSets(descriptorWrites, nullptr);
+        vk::DescriptorBufferInfo buffer_info(frameResources_[i].uniformBuffer->handle(), 0,
+                                             sizeof(UniformBufferObject));
+        frameResources_[i].descriptorSet =
+            DescriptorBuilder::begin(&descriptor_manager_.cache, &descriptor_manager_.allocator)
+                .bind_buffer(0, &buffer_info, vk::DescriptorType::eUniformBuffer,
+                             vk::ShaderStageFlagBits::eVertex)
+                .build(descriptor_manager_.layouts[0]);
     }
 }
 
@@ -385,8 +390,8 @@ void Renderer::createGraphicsPipeline() {
 
     vk::PipelineDynamicStateCreateInfo dynamicStateInfo({}, dynamicStates);
 
-    vk::PipelineLayoutCreateInfo pipelineLayoutInfo({}, 1, &(*descriptorSetLayout_));
-    layout_ = device_->createPipelineLayout(pipelineLayoutInfo);
+    vk::PipelineLayoutCreateInfo pipeline_layout_info({}, descriptor_manager_.layouts);
+    layout_ = device_->createPipelineLayout(pipeline_layout_info);
 
     vk::GraphicsPipelineCreateInfo pipelineInfo(
         {}, 2, shaderStages.data(), &vertexInputInfo, &inputAssemblyInfo, nullptr,
@@ -407,6 +412,22 @@ vk::raii::ShaderModule Renderer::createShaderModule(const std::string& filename)
 void Renderer::loadModels() {
     GLTFLoader loader{device_};
     pScene_ = loader.read_scene_from_file("2.0/BoxTextured/glTF/BoxTextured.gltf");
+
+    auto materials = pScene_->get_components<SceneGraph::PBRMaterial>();
+
+    for (auto material : materials) {
+        vk::DescriptorImageInfo image_info;
+        auto texture = material->textures_["base_color_texture"];
+        image_info.setSampler(*texture->get_sampler()->vk_sampler_);
+        image_info.setImageView(*texture->get_image()->get_view());
+        image_info.setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
+        auto set =
+            DescriptorBuilder::begin(&descriptor_manager_.cache, &descriptor_manager_.allocator)
+                .bind_image(1, &image_info, vk::DescriptorType::eCombinedImageSampler,
+                            vk::ShaderStageFlagBits::eFragment)
+                .build(descriptor_manager_.layouts[1]);
+        descriptor_set_map_.insert(std::make_pair(material, set));
+    }
 }
 
 }  // namespace W3D

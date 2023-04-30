@@ -5,7 +5,6 @@
 #include "common/glm_common.hpp"
 #include "scene_graph/component.hpp"
 
-
 namespace W3D::SceneGraph {
 enum class AlphaMode { Opaque, Mask, Blend };
 class Texture;

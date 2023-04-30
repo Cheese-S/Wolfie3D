@@ -60,6 +60,9 @@ class Instance {
     const SwapchainSupportDetails swapchainSupportDetails() const {
         return queryPhysicalDeviceSwapchainSupport(physicalDevice_);
     };
+    const vk::PhysicalDeviceProperties& physical_device_properties() const {
+        return properties_;
+    }
 
    private:
     void populateDebugMessengerCreateInfo(vk::DebugUtilsMessengerCreateInfoEXT& createInfo);
@@ -82,6 +85,7 @@ class Instance {
     vk::raii::DebugUtilsMessengerEXT debugMessenger_ = nullptr;
     vk::raii::SurfaceKHR surface_ = nullptr;
     vk::raii::PhysicalDevice physicalDevice_ = nullptr;
+    vk::PhysicalDeviceProperties properties_;
     QueueFamilyIndices indices_;
     std::set<uint32_t> uniqueQueueFamilies_;
 };

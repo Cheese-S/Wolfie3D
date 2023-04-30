@@ -8,6 +8,7 @@
 #include "common/file_utils.hpp"
 #include "common/utils.hpp"
 #include "core/device.hpp"
+#include "core/instance.hpp"
 #include "core/memory.hpp"
 #include "scene_graph/components/camera.hpp"
 #include "scene_graph/components/image.hpp"
@@ -20,6 +21,7 @@
 #include "scene_graph/components/transform.hpp"
 #include "scene_graph/node.hpp"
 #include "scene_graph/scene.hpp"
+
 
 namespace W3D {
 
@@ -548,6 +550,8 @@ std::unique_ptr<SceneGraph::Sampler> GLTFLoader::parse_sampler(
     sampler_info.addressModeW = address_mode_w;
     sampler_info.borderColor = vk::BorderColor::eIntOpaqueWhite;
     sampler_info.maxLod = std::numeric_limits<float>::max();
+    sampler_info.maxAnisotropy =
+        device_.get_instance().physical_device_properties().limits.maxSamplerAnisotropy;
 
     vk::raii::Sampler sampler = device_.handle().createSampler(sampler_info);
 

@@ -14,7 +14,7 @@ std::string to_snake_case(const std::string &text) {
                     result << "_";
                 }
 
-                result << std::tolower(c);
+                result << static_cast<char>(std::tolower(c));
             }
         } else {
             result << c;

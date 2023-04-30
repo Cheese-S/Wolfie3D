@@ -31,6 +31,9 @@ class Device {
     const DeviceMemory::Allocator& get_allocator() const {
         return *pAllocator_;
     }
+    const Instance& get_instance() const {
+        return *pInstance_;
+    }
     const vk::raii::Device& handle() const {
         return device_;
     };

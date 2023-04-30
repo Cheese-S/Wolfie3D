@@ -157,6 +157,7 @@ void Instance::pickPhysicalDevice() {
             uniqueQueueFamilies_.emplace(indices_.computeFamily.value());
             uniqueQueueFamilies_.emplace(indices_.graphicsFamily.value());
             uniqueQueueFamilies_.emplace(indices_.presentFamily.value());
+            properties_ = physicalDevice_.getProperties();
             return;
         }
     }

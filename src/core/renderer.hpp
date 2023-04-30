@@ -5,9 +5,12 @@
 
 #include "common/common.hpp"
 #include "common/glm_common.hpp"
+#include "core/descriptor_allocator.hpp"
 #include "device.hpp"
 #include "instance.hpp"
 #include "memory.hpp"
+#include "scene_graph/components/material.hpp"
+#include "scene_graph/components/pbr_material.hpp"
 #include "scene_graph/scene.hpp"
 #include "swapchain.hpp"
 #include "window.hpp"
@@ -39,7 +42,6 @@ class Renderer {
     void initVulkan();
     void createRenderPass();
     void createDescriptorSetLayout();
-    void createDescriptorPool();
 
     void createFrameDatas();
     void createCommandBuffers();
@@ -86,13 +88,19 @@ class Renderer {
     Instance instance_;
     Device device_;
     Swapchain swapchain_;
+    struct DescriptorManager {
+        DescriptorManager(Device& device) : allocator(&device), cache(device) {
+        }
+        DescriptorAllocator allocator;
+        DescriptorLayoutCache cache;
+        std::array<vk::DescriptorSetLayout, 2> layouts;
+    } descriptor_manager_;
     vk::raii::RenderPass renderPass_ = nullptr;
-    vk::raii::DescriptorSetLayout descriptorSetLayout_ = nullptr;
-    vk::raii::DescriptorPool descriptorPool_ = nullptr;
     vk::raii::PipelineLayout layout_ = nullptr;
     vk::raii::Pipeline pipeline_ = nullptr;
     uint32_t currentFrameIdx_ = 0;
     std::vector<FrameResource> frameResources_;
     std::unique_ptr<SceneGraph::Scene> pScene_ = nullptr;
+    std::unordered_map<const SceneGraph::PBRMaterial*, vk::DescriptorSet> descriptor_set_map_;
 };
 }  // namespace W3D
