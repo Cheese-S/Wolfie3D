@@ -35,6 +35,7 @@ class Scene {
     std::unique_ptr<Component> get_model(uint32_t index = 0);
     void set_root_node(Node &node);
     void set_nodes(std::vector<std::unique_ptr<Node>> &&nodes);
+    Node *find_node(const std::string &name);
 
     template <typename T>
     void set_components(std::vector<std::unique_ptr<T>> pTs) {

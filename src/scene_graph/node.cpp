@@ -44,6 +44,6 @@ Component &Node::get_component(const std::type_index index) {
 };
 
 bool Node::has_component(const std::type_index index) {
-    return components_.count(index);
+    return components_.count(index) > 0;
 }
 }  // namespace W3D::SceneGraph

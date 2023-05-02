@@ -1,3 +1,5 @@
+#pragma once
+
 #include <stdint.h>
 
 #include <memory>
@@ -5,17 +7,23 @@
 
 #include "common/common.hpp"
 #include "common/glm_common.hpp"
+#include "common/timer.hpp"
 #include "core/descriptor_allocator.hpp"
 #include "device.hpp"
 #include "instance.hpp"
 #include "memory.hpp"
-#include "scene_graph/components/material.hpp"
-#include "scene_graph/components/pbr_material.hpp"
 #include "scene_graph/scene.hpp"
 #include "swapchain.hpp"
 #include "window.hpp"
 
 namespace W3D {
+
+class InputEvent;
+namespace SceneGraph {
+class Node;
+class FreeCamera;
+class PBRMaterial;
+}  // namespace SceneGraph
 
 class Renderer {
    public:
@@ -28,17 +36,20 @@ class Renderer {
     ~Renderer();
 
     void start();
+    void process_resize();
+    void process_input_event(const InputEvent& input_event);
 
    private:
     void loop();
-    void updateTime();
-    void handleInput();
+    void update();
     void drawFrame();
+
     void updateUniformBuffer();
     void recordDrawCommands(const vk::raii::CommandBuffer& commandBuffer, uint32_t imageIndex);
     void draw_scene(const vk::raii::CommandBuffer& command_buffer);
+    void draw_submesh(const vk::raii::CommandBuffer& command_buffer, SceneGraph::SubMesh* submesh);
 
-    void loadModels();
+    void setup_scene();
     void initVulkan();
     void createRenderPass();
     void createDescriptorSetLayout();
@@ -50,12 +61,17 @@ class Renderer {
     void createDescriptorSets();
     void createGraphicsPipeline();
     vk::raii::ShaderModule createShaderModule(const std::string& filename);
-    void recreateSwapchain();
+    void perform_resize();
 
     struct UniformBufferObject {
         glm::mat4 model;
         glm::mat4 view;
         glm::mat4 proj;
+    };
+
+    struct PushConstantObject {
+        glm::mat4 model;
+        glm::vec4 data;
     };
 
     struct FrameResource {
@@ -73,16 +89,8 @@ class Renderer {
 
     Config config_;
     Window window_;
-    struct Time {
-        float lastFrameTime = 0;
-        float deltaTime = 0;
-    } time_;
-
-    struct MouseState {
-        float lastX = 0;
-        float lastY = 0;
-        bool isFirstClick = false;
-    } mouseState_;
+    Timer timer_;
+    bool window_resized_ = false;
 
     /* ------------------------------ VULKAN STATE ------------------------------ */
     Instance instance_;
@@ -101,6 +109,7 @@ class Renderer {
     uint32_t currentFrameIdx_ = 0;
     std::vector<FrameResource> frameResources_;
     std::unique_ptr<SceneGraph::Scene> pScene_ = nullptr;
+    SceneGraph::Node* pCamera_node;
     std::unordered_map<const SceneGraph::PBRMaterial*, vk::DescriptorSet> descriptor_set_map_;
 };
 }  // namespace W3D

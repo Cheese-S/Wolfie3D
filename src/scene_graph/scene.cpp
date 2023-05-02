@@ -45,6 +45,16 @@ Node &Scene::get_root_node() {
     return *root_;
 }
 
+Node *Scene::find_node(const std::string &name) {
+    for (auto &pNode : pNodes_) {
+        if (pNode->get_name() == name) {
+            return pNode.get();
+        }
+    }
+
+    return nullptr;
+}
+
 const std::vector<std::unique_ptr<Component>> &Scene::get_components(
     const std::type_index &type) const {
     return pComponents_.at(type);

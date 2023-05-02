@@ -25,12 +25,6 @@ Swapchain::Swapchain(Instance* pInstance, Device* pDevice, Window* pWindow,
 };
 
 void Swapchain::recreate() {
-    int width = 0, height = 0;
-    while (width == 0 || height == 0) {
-        pWindow_->getFramebufferSize(&width, &height);
-        pWindow_->waitEvents();
-    }
-    pDevice_->handle().waitIdle();
     cleanup();
     createSwapchain();
 }

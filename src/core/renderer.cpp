@@ -1,3 +1,4 @@
+
 #include "renderer.hpp"
 
 #include <stdint.h>
@@ -6,28 +7,34 @@
 #include <chrono>
 #include <memory>
 #include <ostream>
+#include <queue>
 #include <stdexcept>
 #include <utility>
 #include <vector>
 
+#include "common/utils.hpp"
 #include "gltf_loader.hpp"
+#include "scene_graph/script.hpp"
 
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 
 #include "common/file_utils.hpp"
 #include "memory.hpp"
+#include "scene_graph/components/camera.hpp"
 #include "scene_graph/components/image.hpp"
 #include "scene_graph/components/mesh.hpp"
+#include "scene_graph/components/pbr_material.hpp"
 #include "scene_graph/components/sampler.hpp"
 #include "scene_graph/components/submesh.hpp"
 #include "scene_graph/components/texture.hpp"
+#include "scene_graph/input_event.hpp"
 #include "scene_graph/scene.hpp"
 
 namespace W3D {
 Renderer::Renderer(Config config)
     : config_(config),
-      window_(APP_NAME),
+      window_(APP_NAME, this),
       instance_(&window_),
       device_(&instance_),
       swapchain_(&instance_, &device_, &window_, config_.mssaSamples),
@@ -36,25 +43,39 @@ Renderer::Renderer(Config config)
 
 Renderer::~Renderer() = default;
 
+void Renderer::process_resize() {
+    window_resized_ = true;
+}
+
+void Renderer::process_input_event(const InputEvent& input_event) {
+    auto scripts = pScene_->get_components<SceneGraph::Script>();
+    for (auto script : scripts) {
+        script->process_input_event(input_event);
+    }
+}
+
 void Renderer::start() {
     initVulkan();
-    loadModels();
+    setup_scene();
+    timer_.tick();
     loop();
 }
 
 void Renderer::loop() {
     while (!window_.shouldClose()) {
-        updateTime();
+        update();
         drawFrame();
         window_.pollEvents();
     }
     device_->waitIdle();
 }
 
-void Renderer::updateTime() {
-    float currentFrameTime = window_.getTime();
-    time_.deltaTime = currentFrameTime - time_.lastFrameTime;
-    time_.lastFrameTime = currentFrameTime;
+void Renderer::update() {
+    auto delta_time = static_cast<float>(timer_.tick());
+    auto scripts = pScene_->get_components<SceneGraph::Script>();
+    for (auto script : scripts) {
+        script->update(delta_time);
+    }
 }
 
 void Renderer::drawFrame() {
@@ -97,9 +118,9 @@ void Renderer::drawFrame() {
     // pWindow->isResized() is required since it is not guranteed that eErrorOutOfDateKHR will
     // be returned
     if (presentResult == vk::Result::eErrorOutOfDateKHR ||
-        presentResult == vk::Result::eSuboptimalKHR || window_.isResized()) {
-        window_.resetResizedSignal();
-        recreateSwapchain();
+        presentResult == vk::Result::eSuboptimalKHR || window_resized_) {
+        window_resized_ = false;
+        perform_resize();
     } else if (result != vk::Result::eSuccess) {
         throw std::runtime_error("failed to present swap chain image");
     }
@@ -140,46 +161,76 @@ void Renderer::recordDrawCommands(const vk::raii::CommandBuffer& commandBuffer,
 }
 
 void Renderer::draw_scene(const vk::raii::CommandBuffer& command_buffer) {
-    auto submeshes = pScene_->get_components<SceneGraph::SubMesh>();
-    for (auto submesh : submeshes) {
-        auto set = descriptor_set_map_[dynamic_cast<const SceneGraph::PBRMaterial*>(
-            submesh->get_material())];
-        command_buffer.bindDescriptorSets(
-            vk::PipelineBindPoint::eGraphics, *layout_, 1,
-            {descriptor_set_map_[dynamic_cast<const SceneGraph::PBRMaterial*>(
-                submesh->get_material())]},
-            {});
-        command_buffer.bindVertexBuffers(0, {submesh->pVertex_buffer_->handle()}, {0});
-        if (submesh->pIndex_buffer_) {
-            command_buffer.bindIndexBuffer(submesh->pIndex_buffer_->handle(),
-                                           submesh->index_offset_, vk::IndexType::eUint32);
-            command_buffer.drawIndexed(submesh->vertex_indices_, 1, 0, 0, 0);
-        } else {
-            command_buffer.draw(submesh->vertices_count_, 1, 0, 0);
-        };
+    std::queue<SceneGraph::Node*> traverse_nodes;
+    traverse_nodes.push(&pScene_->get_root_node());
+    while (!traverse_nodes.empty()) {
+        auto node = traverse_nodes.front();
+        traverse_nodes.pop();
+        if (node->has_component<SceneGraph::Mesh>()) {
+            PushConstantObject pco;
+            pco.model = node->get_component<SceneGraph::Transform>().get_world_M();
+            command_buffer.pushConstants<PushConstantObject>(
+                *layout_, vk::ShaderStageFlagBits::eVertex, 0, pco);
+            auto mesh = node->get_component<SceneGraph::Mesh>();
+            auto submeshes = mesh.get_submeshes();
+            for (auto submesh : submeshes) {
+                draw_submesh(command_buffer, submesh);
+            }
+        }
+
+        auto children = node->get_children();
+        for (auto child : children) {
+            traverse_nodes.push(child);
+        }
     }
+}
+
+void Renderer::draw_submesh(const vk::raii::CommandBuffer& command_buffer,
+                            SceneGraph::SubMesh* submesh) {
+    command_buffer.bindDescriptorSets(
+        vk::PipelineBindPoint::eGraphics, *layout_, 1,
+        {descriptor_set_map_[dynamic_cast<const SceneGraph::PBRMaterial*>(
+            submesh->get_material())]},
+        {});
+    command_buffer.bindVertexBuffers(0, {submesh->pVertex_buffer_->handle()}, {0});
+    if (submesh->pIndex_buffer_) {
+        command_buffer.bindIndexBuffer(submesh->pIndex_buffer_->handle(), submesh->index_offset_,
+                                       vk::IndexType::eUint32);
+        command_buffer.drawIndexed(submesh->vertex_indices_, 1, 0, 0, 0);
+    } else {
+        command_buffer.draw(submesh->vertices_count_, 1, 0, 0);
+    };
 }
 
 void Renderer::updateUniformBuffer() {
     static auto startTime = std::chrono::high_resolution_clock::now();
-
     auto currentTime = std::chrono::high_resolution_clock::now();
     float time =
         std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
+    auto camera = &pCamera_node->get_component<SceneGraph::Camera>();
     UniformBufferObject ubo{};
-    ubo.model =
-        glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-    ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f),
-                           glm::vec3(0.0f, 0.0f, 1.0f));
-    ubo.proj = glm::perspective(
-        glm::radians(45.0f),
-        swapchain_.extent().width / static_cast<float>(swapchain_.extent().height), 0.1f, 10.0f);
+    // ubo.model =
+    //     glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+    ubo.model = glm::mat4(1.0f);
+    ubo.view = camera->get_view();
+    ubo.proj = camera->get_projection();
     ubo.proj[1][1] *= -1;
     auto& pUniformBuffer = currentFrame().uniformBuffer;
     pUniformBuffer->update(&ubo, sizeof(ubo));
 }
 
-void Renderer::recreateSwapchain() {
+void Renderer::perform_resize() {
+    int width = 0, height = 0;
+    while (width == 0 || height == 0) {
+        window_.getFramebufferSize(&width, &height);
+        window_.waitEvents();
+    }
+    device_.handle().waitIdle();
+
+    auto scripts = pScene_->get_components<SceneGraph::Script>();
+    for (auto script : scripts) {
+        script->resize(width, height);
+    }
     swapchain_.recreate();
     swapchain_.createFrameBuffers(renderPass_);
 }
@@ -390,7 +441,11 @@ void Renderer::createGraphicsPipeline() {
 
     vk::PipelineDynamicStateCreateInfo dynamicStateInfo({}, dynamicStates);
 
-    vk::PipelineLayoutCreateInfo pipeline_layout_info({}, descriptor_manager_.layouts);
+    vk::PushConstantRange push_constant_range(vk::ShaderStageFlagBits::eVertex, 0,
+                                              sizeof(PushConstantObject));
+
+    vk::PipelineLayoutCreateInfo pipeline_layout_info({}, descriptor_manager_.layouts,
+                                                      push_constant_range);
     layout_ = device_->createPipelineLayout(pipeline_layout_info);
 
     vk::GraphicsPipelineCreateInfo pipelineInfo(
@@ -409,9 +464,9 @@ vk::raii::ShaderModule Renderer::createShaderModule(const std::string& filename)
     return device_->createShaderModule(shaderInfo);
 }
 
-void Renderer::loadModels() {
+void Renderer::setup_scene() {
     GLTFLoader loader{device_};
-    pScene_ = loader.read_scene_from_file("2.0/BoxTextured/glTF/BoxTextured.gltf");
+    pScene_ = loader.read_scene_from_file("2.0/AntiqueCamera/glTF/AntiqueCamera.gltf");
 
     auto materials = pScene_->get_components<SceneGraph::PBRMaterial>();
 
@@ -428,6 +483,9 @@ void Renderer::loadModels() {
                 .build(descriptor_manager_.layouts[1]);
         descriptor_set_map_.insert(std::make_pair(material, set));
     }
+    int width, height;
+    window_.getFramebufferSize(&width, &height);
+    pCamera_node = add_free_camera(*pScene_, "main_camera", width, height);
 }
 
 }  // namespace W3D
