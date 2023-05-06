@@ -1,42 +1,25 @@
 #include "image.hpp"
 
-#include <stb_image.h>
 #include <stb_image_resize.h>
 
 #include "common/error.hpp"
 #include "common/file_utils.hpp"
 #include "core/device.hpp"
+#include "scene_graph/components/image/stb.hpp"
 
 
 namespace W3D::SceneGraph {
 
 std::unique_ptr<Image> Image::load(const std::string &name, const std::string &uri) {
-    std::unique_ptr<Image> pImage = nullptr;
     auto data = W3D::fu::read_binary(uri);
+    return std::make_unique<Stb>(name, data);
+}
 
-    int width, height;
-    int comp;
-    int req_comp = 4;
-
-    auto data_buffer = reinterpret_cast<const stbi_uc *>(data.data());
-    auto data_size = static_cast<int>(data.size());
-
-    auto raw_data = stbi_load_from_memory(data_buffer, data_size, &width, &height, &comp, req_comp);
-
-    if (!raw_data) {
-        throw std::runtime_error("Failed to load" + name + ": " + stbi_failure_reason());
+std::unique_ptr<Image> Image::load_cubemap(const std::string &name, const std::string &uri) {
+    auto extension = fu::get_file_extension(uri);
+    if (extension != "ktx" && extension != "dds") {
+        throw std::runtime_error("Cubemap texture type is not supported");
     }
-
-    pImage->data_ = {raw_data, raw_data + data_size};
-
-    stbi_image_free(raw_data);
-
-    pImage->format_ = vk::Format::eR8G8B8A8Srgb;
-    pImage->mipmaps_[0].extent.width = static_cast<uint32_t>(width);
-    pImage->mipmaps_[0].extent.height = height;
-    pImage->mipmaps_[0].extent.depth = 1u;
-
-    return pImage;
 }
 
 Image::Image(const std::string &name, std::vector<uint8_t> &&data, std::vector<Mipmap> &&mipmaps)

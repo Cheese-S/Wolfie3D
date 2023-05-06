@@ -16,6 +16,7 @@ struct Mipmap {
 class Image : public Component {
    public:
     static std::unique_ptr<Image> load(const std::string &name, const std::string &uri);
+    static std::unique_ptr<Image> load_cubemap(const std::string &name, const std::string &uri);
 
     Image(const std::string &name, std::vector<uint8_t> &&data = {},
           std::vector<Mipmap> &&mipmaps = {});
@@ -37,7 +38,6 @@ class Image : public Component {
     vk::Format get_format() const;
 
    protected:
-   private:
     std::vector<uint8_t> data_;
     vk::Format format_ = vk::Format::eUndefined;
     uint32_t layers_ = 1;

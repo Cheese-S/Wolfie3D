@@ -55,8 +55,8 @@ void Renderer::process_input_event(const InputEvent& input_event) {
 }
 
 void Renderer::start() {
-    initVulkan();
     setup_scene();
+    initVulkan();
     timer_.tick();
     loop();
 }
@@ -237,7 +237,6 @@ void Renderer::perform_resize() {
 
 void Renderer::initVulkan() {
     createRenderPass();
-    createDescriptorSetLayout();
     swapchain_.createFrameBuffers(renderPass_);
     createFrameDatas();
     createGraphicsPipeline();
@@ -321,7 +320,7 @@ void Renderer::createDescriptorSetLayout() {
     descriptor_manager_.layouts[0] =
         descriptor_manager_.cache.create_descriptor_layout(&layoutInfo);
 
-    vk::DescriptorSetLayoutBinding sampler_binding(1, vk::DescriptorType::eCombinedImageSampler, 1,
+    vk::DescriptorSetLayoutBinding sampler_binding(0, vk::DescriptorType::eCombinedImageSampler, 1,
                                                    vk::ShaderStageFlagBits::eFragment);
     bindings[0] = sampler_binding;
     descriptor_manager_.layouts[1] =
@@ -465,23 +464,32 @@ vk::raii::ShaderModule Renderer::createShaderModule(const std::string& filename)
 }
 
 void Renderer::setup_scene() {
+    static const std::vector<std::string> pbr_texture_names = {
+        "base_color_texture", "normal_texture", "occlusion_texture", "metallic_roughness_texture"};
     GLTFLoader loader{device_};
-    pScene_ = loader.read_scene_from_file("2.0/AntiqueCamera/glTF/AntiqueCamera.gltf");
+    pScene_ = loader.read_scene_from_file("2.0/DamagedHelmet/glTF/DamagedHelmet.gltf");
 
     auto materials = pScene_->get_components<SceneGraph::PBRMaterial>();
 
     for (auto material : materials) {
-        vk::DescriptorImageInfo image_info;
-        auto texture = material->textures_["base_color_texture"];
-        image_info.setSampler(*texture->get_sampler()->vk_sampler_);
-        image_info.setImageView(*texture->get_image()->get_view());
-        image_info.setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
-        auto set =
-            DescriptorBuilder::begin(&descriptor_manager_.cache, &descriptor_manager_.allocator)
-                .bind_image(1, &image_info, vk::DescriptorType::eCombinedImageSampler,
-                            vk::ShaderStageFlagBits::eFragment)
-                .build(descriptor_manager_.layouts[1]);
-        descriptor_set_map_.insert(std::make_pair(material, set));
+        auto set_builder =
+            DescriptorBuilder::begin(&descriptor_manager_.cache, &descriptor_manager_.allocator);
+        std::vector<vk::DescriptorImageInfo> image_infos;
+        image_infos.resize(pbr_texture_names.size());
+
+        for (int i = 0; i < pbr_texture_names.size(); i++) {
+            auto& tex_name = pbr_texture_names[i];
+            auto& image_info = image_infos[i];
+            auto texture = material->textures_[tex_name];
+            image_info.setSampler(*texture->get_sampler()->vk_sampler_);
+            image_info.setImageView(*texture->get_image()->get_view());
+            image_info.setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
+            set_builder.bind_image(i, &image_info, vk::DescriptorType::eCombinedImageSampler,
+                                   vk::ShaderStageFlagBits::eFragment);
+        }
+
+        descriptor_set_map_.insert(
+            std::make_pair(material, set_builder.build(descriptor_manager_.layouts[1])));
     }
     int width, height;
     window_.getFramebufferSize(&width, &height);
