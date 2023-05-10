@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "common/utils.hpp"
+#include "glm/gtx/string_cast.hpp"
 #include "gltf_loader.hpp"
 #include "scene_graph/script.hpp"
 
@@ -209,12 +210,19 @@ void Renderer::updateUniformBuffer() {
         std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
     auto camera = &pCamera_node->get_component<SceneGraph::Camera>();
     UniformBufferObject ubo{};
+
+    SceneGraph::Node n(1, "");
+    SceneGraph::Transform T(n);
+    T.set_scale(glm::vec3(16.0f, 16.0f, 16.0f));
     // ubo.model =
     //     glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-    ubo.model = glm::mat4(1.0f);
-    ubo.view = camera->get_view();
-    ubo.proj = camera->get_projection();
-    ubo.proj[1][1] *= -1;
+    ubo.model =
+        glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+    ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f),
+                           glm::vec3(0.0f, 0.0f, 1.0f));
+    ubo.proj = glm::perspective(
+        glm::radians(45.0f),
+        swapchain_.extent().width / static_cast<float>(swapchain_.extent().height), 0.1f, 10.0f);
     auto& pUniformBuffer = currentFrame().uniformBuffer;
     pUniformBuffer->update(&ubo, sizeof(ubo));
 }
@@ -465,7 +473,8 @@ vk::raii::ShaderModule Renderer::createShaderModule(const std::string& filename)
 
 void Renderer::setup_scene() {
     static const std::vector<std::string> pbr_texture_names = {
-        "base_color_texture", "normal_texture", "occlusion_texture", "metallic_roughness_texture"};
+        "base_color_texture",
+    };
     GLTFLoader loader{device_};
     pScene_ = loader.read_scene_from_file("2.0/DamagedHelmet/glTF/DamagedHelmet.gltf");
 

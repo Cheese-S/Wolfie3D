@@ -4,7 +4,7 @@
 #include "scene_graph/components/perspective_camera.hpp"
 
 namespace W3D::SceneGraph {
-const float FreeCamera::ROTATION_MOVE_WEIGHT = 2.4f;
+const float FreeCamera::ROTATION_MOVE_WEIGHT = 4.8f;
 
 const float FreeCamera::TRANSLATION_MOVE_STEP = 10.0f;
 

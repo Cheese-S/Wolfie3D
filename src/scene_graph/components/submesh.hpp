@@ -1,7 +1,10 @@
 #pragma once
 
+#include <cstdint>
+
 #include "core/memory.hpp"
 #include "scene_graph/component.hpp"
+
 
 namespace W3D::SceneGraph {
 class Material;
