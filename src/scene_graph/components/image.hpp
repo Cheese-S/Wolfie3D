@@ -25,7 +25,7 @@ class Image : public Component {
     void generate_mipmaps();
     void create_vk_image(const Device &device,
                          vk::ImageViewType image_view_type = vk::ImageViewType::e2D,
-                         vk::ImageViewCreateFlags flags = {});
+                         vk::ImageCreateFlags flags = {});
     void clear_data();
 
     virtual std::type_index get_type() override;
@@ -33,14 +33,19 @@ class Image : public Component {
     const vk::Extent3D &get_extent() const;
     const uint32_t get_layers() const;
     const std::vector<Mipmap> &get_mipmaps() const;
+    std::vector<Mipmap> &get_mut_mipmaps();
     const DeviceMemory::Image &get_vk_image() const;
     const vk::raii::ImageView &get_view() const;
+    const std::vector<std::vector<vk::DeviceSize>> &get_offsets() const;
     vk::Format get_format() const;
+
+    void set_format(vk::Format format);
 
    protected:
     std::vector<uint8_t> data_;
     vk::Format format_ = vk::Format::eUndefined;
     uint32_t layers_ = 1;
+    std::vector<std::vector<vk::DeviceSize>> offsets_;
     std::vector<Mipmap> mipmaps_;
     std::unique_ptr<DeviceMemory::Image> pVkImage_;
     vk::raii::ImageView view_{nullptr};

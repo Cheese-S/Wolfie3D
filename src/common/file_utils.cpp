@@ -20,7 +20,7 @@ std::vector<uint8_t> read_binary(const std::string &path) {
     std::ifstream file(path, std::ios::ate | std::ios::binary);
 
     if (!file.is_open()) {
-        throw std::runtime_error("failed to open file");
+        throw std::runtime_error("failed to open file: " + path);
     };
 
     size_t file_size = (size_t)file.tellg();

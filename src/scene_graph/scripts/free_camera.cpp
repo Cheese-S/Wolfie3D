@@ -1,5 +1,8 @@
 #include "free_camera.hpp"
 
+#include <iostream>
+
+#include "glm/gtx/string_cast.hpp"
 #include "scene_graph/components/camera.hpp"
 #include "scene_graph/components/perspective_camera.hpp"
 
@@ -35,14 +38,15 @@ void FreeCamera::update(float delta_time) {
         delta_translation.x += TRANSLATION_MOVE_STEP;
     }
 
-    if (mouse_button_pressed_[MouseButton::Middle]) {
+    if (mouse_button_pressed_[MouseButton::Left] && mouse_button_pressed_[MouseButton::Right]) {
+        delta_rotation.z += ROTATION_MOVE_WEIGHT * mouse_move_delta_.x;
+    } else if (mouse_button_pressed_[MouseButton::Middle]) {
         delta_translation.x += TRANSLATION_MOVE_WEIGHT * mouse_move_delta_.x;
         delta_translation.y += TRANSLATION_MOVE_WEIGHT * -mouse_move_delta_.y;
     } else if (mouse_button_pressed_[MouseButton::Left]) {
         delta_rotation.x -= ROTATION_MOVE_WEIGHT * mouse_move_delta_.y;
         delta_rotation.y -= ROTATION_MOVE_WEIGHT * mouse_move_delta_.x;
     }
-
     delta_translation *= speed_multiplier_ * delta_time;
     delta_rotation *= delta_time;
 

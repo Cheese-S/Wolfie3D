@@ -2,7 +2,10 @@
 
 #include <sstream>
 
+#include "core/device.hpp"
 #include "scene_graph/components/camera.hpp"
+#include "scene_graph/components/image.hpp"
+#include "scene_graph/components/texture.hpp"
 #include "scene_graph/node.hpp"
 #include "scene_graph/scene.hpp"
 #include "scene_graph/scripts/free_camera.hpp"

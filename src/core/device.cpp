@@ -47,16 +47,16 @@ void Device::createCommandPool() {
 
 vk::raii::ImageView Device::createImageView(VkImage image, vk::Format format,
                                             vk::ImageAspectFlags aspectFlags,
-                                            uint32_t mipLevels) const {
+                                            vk::ImageViewType view_type, uint32_t mipLevels) const {
     vk::ImageViewCreateInfo viewInfo{};
     viewInfo.image = image;
-    viewInfo.viewType = vk::ImageViewType::e2D;
+    viewInfo.viewType = view_type;
     viewInfo.format = format;
     viewInfo.subresourceRange.aspectMask = aspectFlags;
     viewInfo.subresourceRange.baseMipLevel = 0;
     viewInfo.subresourceRange.levelCount = mipLevels;
     viewInfo.subresourceRange.baseArrayLayer = 0;
-    viewInfo.subresourceRange.layerCount = 1;
+    viewInfo.subresourceRange.layerCount = view_type == vk::ImageViewType::eCube ? 6 : 1;
     return device_.createImageView(viewInfo);
 };
 

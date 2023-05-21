@@ -85,8 +85,7 @@ target_sources(${PROJECT_NAME} PRIVATE
 
     src/scene_graph/components/image/stb.cpp
     src/scene_graph/components/image/stb.hpp
-    src/scene_graph/components/image/ktx.cpp
-    src/scene_graph/components/image/ktx.hpp
+    
 
     src/scene_graph/scripts/free_camera.cpp
     src/scene_graph/scripts/free_camera.hpp
@@ -115,5 +114,6 @@ target_link_libraries(${PROJECT_NAME}
     stb
     Vulkan::Vulkan
     vma
-    libktx
+    gli
+    renderdoc
 )

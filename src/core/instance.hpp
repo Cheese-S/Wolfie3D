@@ -63,6 +63,9 @@ class Instance {
     const vk::PhysicalDeviceProperties& physical_device_properties() const {
         return properties_;
     }
+    const vk::PhysicalDeviceFeatures& physical_device_featuers() const {
+        return features_;
+    }
 
    private:
     void populateDebugMessengerCreateInfo(vk::DebugUtilsMessengerCreateInfoEXT& createInfo);
@@ -86,6 +89,7 @@ class Instance {
     vk::raii::SurfaceKHR surface_ = nullptr;
     vk::raii::PhysicalDevice physicalDevice_ = nullptr;
     vk::PhysicalDeviceProperties properties_;
+    vk::PhysicalDeviceFeatures features_;
     QueueFamilyIndices indices_;
     std::set<uint32_t> uniqueQueueFamilies_;
 };

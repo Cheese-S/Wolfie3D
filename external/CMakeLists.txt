@@ -2,8 +2,6 @@ cmake_minimum_required(VERSION 3.19.0)
 
 project(external LANGUAGES C CXX)
 
-# Read user defined dirs
-include(${CMAKE_CURRENT_SOURCE_DIR}/build.env.cmake)
 
 # vulkan
 find_package(Vulkan REQUIRED GLOBAL)
@@ -39,12 +37,15 @@ target_sources(vma INTERFACE ${VMA_DIR}/vk_mem_alloc.h)
 target_include_directories(vma INTERFACE ${VMA_DIR})
 target_link_libraries(vma INTERFACE Vulkan::Vulkan)
 
-# libktx
-add_library(libktx INTERFACE)
-target_include_directories(libktx INTERFACE
-    ${LIBKTX_DIR}/include
-)
-target_link_libraries(libktx INTERFACE
-    ${LIBKTX_DIR}/lib/ktx.lib
-)
-    
+# gli
+add_library(gli INTERFACE)
+set(GLI_DIR ${CMAKE_CURRENT_SOURCE_DIR}/gli)
+target_sources(gli INTERFACE ${GLI_DIR}/gli/gli.hpp)
+target_include_directories(gli INTERFACE ${GLI_DIR})
+
+# renderdoc
+add_library(renderdoc INTERFACE)
+set(RENDERDOC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/renderdoc)
+target_sources(renderdoc INTERFACE ${RENDERDOC_DIR}/renderdoc_app.h)
+target_include_directories(renderdoc INTERFACE ${RENDERDOC_DIR})
+

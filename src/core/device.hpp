@@ -15,7 +15,8 @@ class Device {
    public:
     Device(Instance* pInstance);
     vk::raii::ImageView createImageView(VkImage image, vk::Format format,
-                                        vk::ImageAspectFlags aspectFlags, uint32_t mipLevels) const;
+                                        vk::ImageAspectFlags aspectFlags,
+                                        vk::ImageViewType view_type, uint32_t mipLevels) const;
     std::vector<vk::raii::CommandBuffer> allocateCommandBuffers(
         vk::CommandBufferAllocateInfo& allocInfo);
     vk::Result presentKHR(const vk::PresentInfoKHR& presentInfo);

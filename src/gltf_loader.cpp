@@ -22,7 +22,6 @@
 #include "scene_graph/node.hpp"
 #include "scene_graph/scene.hpp"
 
-
 namespace W3D {
 
 template <class T, class Y>

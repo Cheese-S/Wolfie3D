@@ -125,7 +125,8 @@ void Swapchain::createImageViews() {
     imageViews_.reserve(images_.size());
     for (auto image : images_) {
         imageViews_.emplace_back(pDevice_->createImageView(image, surfaceFormat_.format,
-                                                           vk::ImageAspectFlagBits::eColor, 1));
+                                                           vk::ImageAspectFlagBits::eColor,
+                                                           vk::ImageViewType::e2D, 1));
     }
     // for (size_t i = 0; i < images_.size(); i++) {
     //     imageViews_[i] = pDevice_->createImageView(images_[i], surfaceFormat_.format,
@@ -147,8 +148,9 @@ void Swapchain::createDepthResource() {
     imageInfo.sharingMode = vk::SharingMode::eExclusive;
     imageInfo.samples = mssaSamples_;
     depthResource_.pImage = pDevice_->get_allocator().allocateAttachmentImage(imageInfo);
-    depthResource_.view = pDevice_->createImageView(depthResource_.pImage->handle(), depthFormat,
-                                                    vk::ImageAspectFlagBits::eDepth, 1);
+    depthResource_.view =
+        pDevice_->createImageView(depthResource_.pImage->handle(), depthFormat,
+                                  vk::ImageAspectFlagBits::eDepth, vk::ImageViewType::e2D, 1);
 }
 
 vk::Format Swapchain::findDepthFormat() {

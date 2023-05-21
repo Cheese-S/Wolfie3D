@@ -2,24 +2,52 @@
 
 #include <stb_image_resize.h>
 
+#include <gli/gli.hpp>
+
 #include "common/error.hpp"
 #include "common/file_utils.hpp"
 #include "core/device.hpp"
-#include "scene_graph/components/image/stb.hpp"
 
+// #include "scene_graph/components/image/ktx.hpp"
+#include "scene_graph/components/image/stb.hpp"
 
 namespace W3D::SceneGraph {
 
 std::unique_ptr<Image> Image::load(const std::string &name, const std::string &uri) {
+    auto extension = fu::get_file_extension(uri);
     auto data = W3D::fu::read_binary(uri);
-    return std::make_unique<Stb>(name, data);
+    if (extension == "png" || extension == "jpg") {
+        return std::make_unique<Stb>(name, data);
+    }
 }
 
 std::unique_ptr<Image> Image::load_cubemap(const std::string &name, const std::string &uri) {
-    auto extension = fu::get_file_extension(uri);
-    if (extension != "ktx" && extension != "dds") {
-        throw std::runtime_error("Cubemap texture type is not supported");
+    static const std::unordered_map<gli::format, vk::Format> gli_to_vk_format_map = {
+        {gli::FORMAT_RGBA8_UNORM_PACK8, vk::Format::eR8G8B8A8Unorm},
+        {gli::FORMAT_RGBA32_SFLOAT_PACK32, vk::Format::eR32G32B32A32Sfloat},
+        {gli::FORMAT_RGBA_DXT5_UNORM_BLOCK16, vk::Format::eBc3UnormBlock},
+        {gli::FORMAT_RG32_SFLOAT_PACK32, vk::Format::eR32G32Sfloat},
+        {gli::FORMAT_RGB8_UNORM_PACK8, vk::Format::eR8G8B8Unorm}};
+
+    gli::texture_cube gli_cubemap(gli::load(uri));
+
+    if (gli_cubemap.empty()) {
+        throw std::runtime_error("cannot load cubemap");
     }
+
+    uint32_t base_width = static_cast<uint32_t>(gli_cubemap.extent().x);
+    uint32_t base_height = static_cast<uint32_t>(gli_cubemap.extent().y);
+    size_t size = gli_cubemap.size();
+
+    auto image = std::make_unique<SceneGraph::Image>(name);
+    image->format_ = gli_to_vk_format_map.at(gli_cubemap.format());
+    image->mipmaps_.resize(gli_cubemap.levels());
+    image->mipmaps_[0].extent = vk::Extent3D{base_width, base_height, 1};
+    image->layers_ = 6;
+
+    image->data_ = {gli_cubemap.data<uint8_t>(), gli_cubemap.data<uint8_t>() + size};
+
+    return image;
 }
 
 Image::Image(const std::string &name, std::vector<uint8_t> &&data, std::vector<Mipmap> &&mipmaps)
@@ -30,14 +58,15 @@ Image::Image(const std::string &name, std::vector<uint8_t> &&data, std::vector<M
 }
 
 void Image::create_vk_image(const Device &device, vk::ImageViewType image_view_type,
-                            vk::ImageViewCreateFlags flags) {
+                            vk::ImageCreateFlags flags) {
     assert(!pVkImage_);
     vk::ImageCreateInfo image_info;
+    image_info.flags = flags;
     image_info.imageType = vk::ImageType::e2D;
     image_info.format = format_;
     image_info.extent = get_extent();
     image_info.mipLevels = mipmaps_.size();
-    image_info.arrayLayers = 1;
+    image_info.arrayLayers = flags & vk::ImageCreateFlagBits::eCubeCompatible ? 6 : 1;
     image_info.samples = vk::SampleCountFlagBits::e1;
     image_info.tiling = vk::ImageTiling::eOptimal;
     image_info.usage = vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst;
@@ -46,7 +75,7 @@ void Image::create_vk_image(const Device &device, vk::ImageViewType image_view_t
     pVkImage_ = device.get_allocator().allocate_device_only_image(image_info);
 
     view_ = device.createImageView(pVkImage_->handle(), format_, vk::ImageAspectFlagBits::eColor,
-                                   static_cast<uint32_t>(mipmaps_.size()));
+                                   image_view_type, static_cast<uint32_t>(mipmaps_.size()));
 }
 
 void Image::generate_mipmaps() {
@@ -112,6 +141,14 @@ const std::vector<Mipmap> &Image::get_mipmaps() const {
     return mipmaps_;
 }
 
+std::vector<Mipmap> &Image::get_mut_mipmaps() {
+    return mipmaps_;
+}
+
+const std::vector<std::vector<vk::DeviceSize>> &Image::get_offsets() const {
+    return offsets_;
+}
+
 const DeviceMemory::Image &Image::get_vk_image() const {
     assert(pVkImage_);
     return *pVkImage_;
@@ -119,6 +156,10 @@ const DeviceMemory::Image &Image::get_vk_image() const {
 
 const vk::raii::ImageView &Image::get_view() const {
     return view_;
+}
+
+void Image::set_format(vk::Format format) {
+    format_ = format;
 }
 
 }  // namespace W3D::SceneGraph

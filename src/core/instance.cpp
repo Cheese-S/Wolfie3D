@@ -88,7 +88,7 @@ void Instance::createInstance() {
     if (ENABLE_VALIDATION_LAYERS) {
         extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
     }
-    extensions.push_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+    // extensions.push_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
     Window::getRequiredExtensions(extensions);
     createInfo.enabledExtensionCount = extensions.size();
     createInfo.ppEnabledExtensionNames = extensions.data();
@@ -158,6 +158,7 @@ void Instance::pickPhysicalDevice() {
             uniqueQueueFamilies_.emplace(indices_.graphicsFamily.value());
             uniqueQueueFamilies_.emplace(indices_.presentFamily.value());
             properties_ = physicalDevice_.getProperties();
+            features_ = physicalDevice_.getFeatures();
             return;
         }
     }

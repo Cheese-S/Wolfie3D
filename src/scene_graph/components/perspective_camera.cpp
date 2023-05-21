@@ -5,7 +5,9 @@ PerspectiveCamera::PerspectiveCamera(const std::string &name) : Camera(name) {
 }
 
 glm::mat4 PerspectiveCamera::get_projection() {
-    return glm::perspective(fov_, aspect_ratio_, znear_, zfar_);
+    auto proj = glm::perspective(fov_, aspect_ratio_, znear_, zfar_);
+    proj[1][1] *= -1;
+    return proj;
 }
 
 void PerspectiveCamera::set_aspect_ratio(float aspect_ratio) {
