@@ -111,7 +111,7 @@ void main() {
     vec3 V = normalize(pco.cam_pos.rgb - fragUVW);
     vec3 R = reflect(-V, N);
 
-    float metallic = texture(metal_roughness_sampler, in_uv).r; 
+    float metallic = texture(metal_roughness_sampler, in_uv).b; 
     float roughness = texture(metal_roughness_sampler, in_uv).g;
 
     vec3 F0 = vec3(0.04);

@@ -1,14 +1,6 @@
 
 #include "renderer.hpp"
 
-#include "common/error.hpp"
-
-VKBP_DISABLE_WARNINGS()
-#include <libloaderapi.h>
-#include <minwindef.h>
-VKBP_ENABLE_WARNINGS()
-
-#include <renderdoc_app.h>
 #include <stdint.h>
 
 #include <array>
@@ -21,6 +13,7 @@ VKBP_ENABLE_WARNINGS()
 #include <utility>
 #include <vector>
 
+#include "common/error.hpp"
 #include "common/file_utils.hpp"
 #include "common/utils.hpp"
 #include "glm/gtx/string_cast.hpp"
@@ -36,8 +29,6 @@ VKBP_ENABLE_WARNINGS()
 #include "scene_graph/input_event.hpp"
 #include "scene_graph/scene.hpp"
 #include "scene_graph/script.hpp"
-
-RENDERDOC_API_1_6_0* rdoc_api = NULL;
 
 namespace W3D {
 
@@ -149,13 +140,13 @@ void Renderer::process_input_event(const InputEvent& input_event) {
 }
 
 void Renderer::start() {
-    if (HMODULE mod = GetModuleHandleA("renderdoc.dll")) {
+    /*if (HMODULE mod = GetModuleHandleA("renderdoc.dll")) {
         pRENDERDOC_GetAPI RENDERDOC_GetAPI =
             (pRENDERDOC_GetAPI)GetProcAddress(mod, "RENDERDOC_GetAPI");
         int ret = RENDERDOC_GetAPI(eRENDERDOC_API_Version_1_6_0, (void**)&rdoc_api);
         assert(ret == 1);
         std::cout << "loaded" << std::endl;
-    }
+    }*/
     setup_scene();
     initVulkan();
     timer_.tick();
@@ -270,7 +261,6 @@ void Renderer::draw_scene(const vk::raii::CommandBuffer& command_buffer) {
         traverse_nodes.pop();
         if (node->has_component<SceneGraph::Mesh>()) {
             PushConstantObject pco;
-            node->get_component<SceneGraph::Transform>().set_scale(glm::vec3(50.0f, 50.0f, 50.0f));
             pco.model = node->get_component<SceneGraph::Transform>().get_world_M();
             pco.cam_pos = pCamera_node->get_component<SceneGraph::Transform>().get_translation();
             command_buffer.pushConstants<PushConstantObject>(
@@ -637,7 +627,7 @@ void Renderer::setup_scene() {
     static const std::vector<std::string> pbr_texture_names = {
         "base_color_texture", "normal_texture", "occlusion_texture", "metallic_roughness_texture"};
     GLTFLoader loader{device_};
-    pScene_ = loader.read_scene_from_file("2.0/BoomBox/glTF/BoomBox.gltf");
+    pScene_ = loader.read_scene_from_file("2.0/DamagedHelmet/glTF/DamagedHelmet.gltf");
 
     auto materials = pScene_->get_components<SceneGraph::PBRMaterial>();
 
@@ -760,9 +750,6 @@ void Renderer::load_texture_cubemap() {
 }
 
 void Renderer::compute_irraidiance() {
-    if (rdoc_api) {
-        rdoc_api->StartFrameCapture(nullptr, nullptr);
-    }
     const uint32_t DIMENSION = 64;
     /* -------------------------- setup irradiance cube ------------------------- */
 
@@ -1072,15 +1059,9 @@ void Renderer::compute_irraidiance() {
                      cube_subresource);
 
     device_.endOneTimeCommands(render_cmd_buffer);
-    if (rdoc_api) {
-        rdoc_api->EndFrameCapture(NULL, NULL);
-    }
 }
 
 void Renderer::compute_prefilter_cube() {
-    if (rdoc_api) {
-        rdoc_api->StartFrameCapture(NULL, NULL);
-    }
     const uint32_t DIMENSION = 512;
     /* -------------------------- setup irradiance cube ------------------------- */
 
@@ -1394,15 +1375,9 @@ void Renderer::compute_prefilter_cube() {
                      vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
                      cube_subresource);
     device_.endOneTimeCommands(render_cmd_buffer);
-    if (rdoc_api) {
-        rdoc_api->EndFrameCapture(NULL, NULL);
-    }
 }
 
 void Renderer::compute_BRDF_LUT() {
-    if (rdoc_api) {
-        rdoc_api->StartFrameCapture(NULL, NULL);
-    }
     const uint32_t DIMENSION = 512;
     /* -------------------------- setup irradiance cube ------------------------- */
     vk::ImageCreateInfo image_create_info;
@@ -1577,9 +1552,5 @@ void Renderer::compute_BRDF_LUT() {
     device_.graphicsQueue().waitIdle();
 
     device_.endOneTimeCommands(render_cmd_buffer);
-    std::cout << "hjere" << std::endl;
-    if (rdoc_api) {
-        rdoc_api->EndFrameCapture(NULL, NULL);
-    }
 }
 }  // namespace W3D
