@@ -1,7 +1,8 @@
 #version 450
 
-layout (location = 0) in vec2 inUV;
-layout (location = 0) out vec4 outColor;
+layout (location = 0) in vec2 in_uv;
+layout (location = 0) out vec4 out_color;
+
 layout (constant_id = 0) const uint NUM_SAMPLES = 1024u;
 
 const float PI = 3.1415926536;
@@ -86,5 +87,5 @@ vec2 BRDF(float NoV, float roughness)
 
 void main() 
 {
-	outColor = vec4(BRDF(inUV.s, inUV.t), 0.0, 1.0);
+	out_color = vec4(BRDF(in_uv.s, in_uv.t), 0.0, 1.0);
 }

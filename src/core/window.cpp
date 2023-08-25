@@ -1,130 +1,198 @@
 #include "window.hpp"
 
+#include "common/logging.hpp"
+#include "common/utils.hpp"
+#include "common/vk_common.hpp"
+
 #include "GLFW/glfw3.h"
+#include "instance.hpp"
 #include "renderer.hpp"
-#include "scene_graph/input_event.hpp"
+#include "scene_graph/event.hpp"
 
-namespace W3D {
+extern const char *APP_NAME;
 
-void resize_callback(GLFWwindow *window, int width, int height) {
-    auto pRenderer = reinterpret_cast<Renderer *>(glfwGetWindowUserPointer(window));
-    pRenderer->process_resize();
+namespace W3D
+{
+
+const int Window::DEFAULT_WINDOW_WIDTH  = 800;
+const int Window::DEFAULT_WINDOW_HEIGHT = 600;
+
+void resize_callback(GLFWwindow *window, int width, int height)
+{
+	ResizeEvent event;
+	Renderer   *p_renderer = reinterpret_cast<Renderer *>(glfwGetWindowUserPointer(window));
+	p_renderer->process_event(event);
 }
 
-inline KeyCode translate_key_code(int key) {
-    static const std::unordered_map<int, KeyCode> key_lookup = {{GLFW_KEY_W, KeyCode::W},
-                                                                {GLFW_KEY_S, KeyCode::S},
-                                                                {GLFW_KEY_A, KeyCode::A},
-                                                                {GLFW_KEY_D, KeyCode::D}};
-    auto it = key_lookup.find(key);
-    if (it == key_lookup.end()) {
-        return KeyCode::Unknown;
-    } else {
-        return it->second;
-    }
+inline KeyCode translate_key_code(int key)
+{
+	static const std::unordered_map<int, KeyCode> key_lookup = {
+	    {GLFW_KEY_W, KeyCode::eW},
+	    {GLFW_KEY_S, KeyCode::eS},
+	    {GLFW_KEY_A, KeyCode::eA},
+	    {GLFW_KEY_D, KeyCode::eD},
+	};
+	auto it = key_lookup.find(key);
+	if (it == key_lookup.end())
+	{
+		return KeyCode::eUnknown;
+	}
+	else
+	{
+		return it->second;
+	}
 }
 
-inline KeyAction translate_key_action(int action) {
-    if (action == GLFW_PRESS) {
-        return KeyAction::Down;
-    } else if (action == GLFW_RELEASE) {
-        return KeyAction::Up;
-    } else if (action == GLFW_REPEAT) {
-        return KeyAction::Repeat;
-    }
-    return KeyAction::Unknown;
+inline KeyAction translate_key_action(int action)
+{
+	if (action == GLFW_PRESS)
+	{
+		return KeyAction::eDown;
+	}
+	else if (action == GLFW_RELEASE)
+	{
+		return KeyAction::eUp;
+	}
+	else if (action == GLFW_REPEAT)
+	{
+		return KeyAction::eRepeat;
+	}
+	return KeyAction::eUnknown;
 }
 
-inline MouseAction translate_mouse_action(int action) {
-    if (action == GLFW_PRESS) {
-        return MouseAction::Down;
-    } else if (action == GLFW_RELEASE) {
-        return MouseAction::Up;
-    }
-    return MouseAction::Unknown;
+inline MouseAction translate_mouse_action(int action)
+{
+	if (action == GLFW_PRESS)
+	{
+		return MouseAction::eDown;
+	}
+	else if (action == GLFW_RELEASE)
+	{
+		return MouseAction::eUp;
+	}
+	return MouseAction::eUnknown;
 }
 
-inline MouseButton translate_mouse_button(int button) {
-    if (button == GLFW_MOUSE_BUTTON_LEFT) {
-        return MouseButton::Left;
-    } else if (button == GLFW_MOUSE_BUTTON_RIGHT) {
-        return MouseButton::Right;
-    } else if (button == GLFW_MOUSE_BUTTON_MIDDLE) {
-        return MouseButton::Middle;
-    }
-    return MouseButton::Unknown;
+inline MouseButton translate_mouse_button(int button)
+{
+	if (button == GLFW_MOUSE_BUTTON_LEFT)
+	{
+		return MouseButton::eLeft;
+	}
+	else if (button == GLFW_MOUSE_BUTTON_RIGHT)
+	{
+		return MouseButton::eRight;
+	}
+	else if (button == GLFW_MOUSE_BUTTON_MIDDLE)
+	{
+		return MouseButton::eMiddle;
+	}
+	return MouseButton::eUnknown;
 }
 
-void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods) {
-    KeyCode key_code = translate_key_code(key);
-    KeyAction key_action = translate_key_action(action);
-    auto pRenderer = reinterpret_cast<Renderer *>(glfwGetWindowUserPointer(window));
+void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods)
+{
+	KeyCode   key_code   = translate_key_code(key);
+	KeyAction key_action = translate_key_action(action);
+	auto      pRenderer  = reinterpret_cast<Renderer *>(glfwGetWindowUserPointer(window));
 
-    pRenderer->process_input_event(KeyInputEvent(key_code, key_action));
+	pRenderer->process_event(KeyInputEvent(key_code, key_action));
 }
 
-void mouse_button_callback(GLFWwindow *window, int button, int action, int mods) {
-    MouseAction mouse_action = translate_mouse_action(action);
-    MouseButton mouse_button = translate_mouse_button(button);
+void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
+{
+	MouseAction mouse_action = translate_mouse_action(action);
+	MouseButton mouse_button = translate_mouse_button(button);
 
-    double xpos, ypos;
-    glfwGetCursorPos(window, &xpos, &ypos);
+	double xpos, ypos;
+	glfwGetCursorPos(window, &xpos, &ypos);
 
-    auto pRenderer = reinterpret_cast<Renderer *>(glfwGetWindowUserPointer(window));
-    pRenderer->process_input_event(MouseButtonInputEvent{
-        mouse_button, mouse_action, static_cast<float>(xpos), static_cast<float>(ypos)});
+	auto pRenderer = reinterpret_cast<Renderer *>(glfwGetWindowUserPointer(window));
+	pRenderer->process_event(MouseButtonInputEvent{
+	    mouse_button,
+	    mouse_action,
+	    static_cast<float>(xpos),
+	    static_cast<float>(ypos)});
 }
 
-void cursor_position_callback(GLFWwindow *window, double xpos, double ypos) {
-    auto pRenderer = reinterpret_cast<Renderer *>(glfwGetWindowUserPointer(window));
-    pRenderer->process_input_event(MouseButtonInputEvent{MouseButton::Unknown, MouseAction::Move,
-                                                         static_cast<float>(xpos),
-                                                         static_cast<float>(ypos)});
+void cursor_position_callback(GLFWwindow *window, double xpos, double ypos)
+{
+	auto pRenderer = reinterpret_cast<Renderer *>(glfwGetWindowUserPointer(window));
+	pRenderer->process_event(MouseButtonInputEvent{MouseButton::eUnknown, MouseAction::eMove, static_cast<float>(xpos), static_cast<float>(ypos)});
 }
 
-void Window::getRequiredExtensions(std::vector<const char *> &extensions) {
-    uint32_t glfwExtensionCount = 0;
-    const char **glfwExtensions;
-    glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
+void Window::push_required_extensions(std::vector<const char *> &extensions)
+{
+	uint32_t     glfwExtensionCount = 0;
+	const char **glfwExtensions;
+	glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
 
-    for (uint32_t i = 0; i < glfwExtensionCount; i++) {
-        extensions.push_back(*(glfwExtensions + i));
-    }
+	for (uint32_t i = 0; i < glfwExtensionCount; i++)
+	{
+		extensions.push_back(*(glfwExtensions + i));
+	}
 };
 
-Window::Window(const char *title, Renderer *pRenderer, int width, int height) {
-    glfwInit();
-
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
-
-    handle_ = glfwCreateWindow(width, height, title, nullptr, nullptr);
-    glfwSetWindowUserPointer(handle_, pRenderer);
-    glfwSetFramebufferSizeCallback(handle_, resize_callback);
-    glfwSetKeyCallback(handle_, key_callback);
-    glfwSetMouseButtonCallback(handle_, mouse_button_callback);
-    glfwSetCursorPosCallback(handle_, cursor_position_callback);
+Window::Window(const char *title, int width, int height)
+{
+	glfwInit();
+	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+	glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
+	handle_ = glfwCreateWindow(width, height, title, nullptr, nullptr);
 }
 
-Window::~Window() {
-    glfwDestroyWindow(handle_);
-    glfwTerminate();
+Window::~Window()
+{
+	glfwDestroyWindow(handle_);
+	glfwTerminate();
 }
 
-bool Window::shouldClose() {
-    return glfwWindowShouldClose(handle_);
+void Window::register_callbacks(Renderer *pRenderer)
+{
+	glfwSetWindowUserPointer(handle_, pRenderer);
+	glfwSetFramebufferSizeCallback(handle_, resize_callback);
+	glfwSetKeyCallback(handle_, key_callback);
+	glfwSetMouseButtonCallback(handle_, mouse_button_callback);
+	glfwSetCursorPosCallback(handle_, cursor_position_callback);
 }
 
-void Window::pollEvents() {
-    glfwPollEvents();
+vk::SurfaceKHR Window::create_surface(Instance &instance)
+{
+	VkSurfaceKHR surface;
+	if (glfwCreateWindowSurface(instance.get_handle(), handle_, nullptr, &surface) != VK_SUCCESS)
+	{
+		LOGE("Unable to create surface!");
+		throw std::runtime_error("Unrecoverable error");
+	}
+	return vk::SurfaceKHR(surface);
 }
 
-void Window::waitEvents() {
-    glfwWaitEvents();
+bool Window::should_close()
+{
+	return glfwWindowShouldClose(handle_);
 }
 
-void Window::getFramebufferSize(int *width, int *height) const {
-    glfwGetFramebufferSize(handle_, width, height);
+void Window::poll_events()
+{
+	glfwPollEvents();
 }
 
-}  // namespace W3D
+void Window::wait_events()
+{
+	glfwWaitEvents();
+}
+
+vk::Extent2D Window::get_extent() const
+{
+	vk::Extent2D extent;
+	int          width, height;
+	glfwGetFramebufferSize(handle_, &width, &height);
+	return vk::Extent2D{to_u32(width), to_u32(height)};
+}
+
+GLFWwindow *Window::get_handle()
+{
+	return handle_;
+}
+
+}        // namespace W3D

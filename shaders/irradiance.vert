@@ -4,7 +4,7 @@ layout(location = 0) in vec3 position;
 layout(location = 1) in vec3 normal;
 layout(location = 2) in vec2 uv;
 
-layout(push_constant) uniform PushConstantObject {
+layout(push_constant) uniform PCO {
     mat4 proj;
 } pco;
 

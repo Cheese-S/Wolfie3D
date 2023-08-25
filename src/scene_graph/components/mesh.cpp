@@ -1,30 +1,38 @@
 #include "mesh.hpp"
 
-namespace W3D::SceneGraph {
+namespace W3D::sg
+{
 
-Mesh::Mesh(const std::string &name) : Component(name){};
+Mesh::Mesh(const std::string &name) :
+    Component(name){};
 
-void Mesh::add_submesh(SubMesh &submesh) {
-    submeshes_.push_back(&submesh);
+void Mesh::add_submesh(SubMesh &submesh)
+{
+	p_submeshs.push_back(&submesh);
 }
 
-void Mesh::add_node(Node &node) {
-    nodes_.push_back(&node);
+void Mesh::add_node(Node &node)
+{
+	p_nodes.push_back(&node);
 }
 
-std::type_index Mesh::get_type() {
-    return typeid(Mesh);
+std::type_index Mesh::get_type()
+{
+	return typeid(Mesh);
 }
 
-const AABB &Mesh::get_bounds() const {
-    return bounds_;
+const AABB &Mesh::get_bounds() const
+{
+	return bounds_;
 }
 
-const std::vector<SubMesh *> &Mesh::get_submeshes() const {
-    return submeshes_;
+const std::vector<SubMesh *> &Mesh::get_p_submeshs() const
+{
+	return p_submeshs;
 }
 
-const std::vector<Node *> &Mesh::get_nodes() const {
-    return nodes_;
+const std::vector<Node *> &Mesh::get_p_nodes() const
+{
+	return p_nodes;
 }
-}  // namespace W3D::SceneGraph
+}        // namespace W3D::sg

@@ -2,60 +2,42 @@
 
 #include <memory>
 
-#include "common/common.hpp"
+#include "common/vk_common.hpp"
+#include "device_memory/allocator.hpp"
+#include "vulkan_object.hpp"
 
-namespace W3D {
-namespace DeviceMemory {
-class Buffer;
-class Allocator;
-}  // namespace DeviceMemory
+namespace W3D
+{
 class Instance;
+class PhysicalDevice;
+class DeviceMemoryAllocator;
+class CommandPool;
+class CommandBuffer;
 
-class Device {
-   public:
-    Device(Instance* pInstance);
-    vk::raii::ImageView createImageView(VkImage image, vk::Format format,
-                                        vk::ImageAspectFlags aspectFlags,
-                                        vk::ImageViewType view_type, uint32_t mipLevels) const;
-    std::vector<vk::raii::CommandBuffer> allocateCommandBuffers(
-        vk::CommandBufferAllocateInfo& allocInfo);
-    vk::Result presentKHR(const vk::PresentInfoKHR& presentInfo);
+class Device : public VulkanObject<typename vk::Device>
+{
+  public:
+	static const std::vector<const char *> REQUIRED_EXTENSIONS;
 
-    void transferBuffer(DeviceMemory::Buffer* src, DeviceMemory::Buffer* dst,
-                        const vk::BufferCopy& copyRegion);
-    vk::raii::CommandBuffer beginOneTimeCommands() const;
-    void endOneTimeCommands(vk::raii::CommandBuffer& commandBuffer) const;
+	Device(Instance &instance, PhysicalDevice &physical_device);
+	~Device() override;
+	CommandBuffer begin_one_time_buf() const;
+	void          end_one_time_buf(CommandBuffer &cmd_buf) const;
 
-    vk::raii::Device* operator->() {
-        return &device_;
-    }
-    const DeviceMemory::Allocator& get_allocator() const {
-        return *pAllocator_;
-    }
-    const Instance& get_instance() const {
-        return *pInstance_;
-    }
-    const vk::raii::Device& handle() const {
-        return device_;
-    };
-    const vk::raii::Queue& graphicsQueue() const {
-        return graphicsQueue_;
-    };
-    const vk::raii::Queue& presentQueue() const {
-        return presentQueue_;
-    };
-    const vk::raii::Queue& computeQueue() const {
-        return computeQueue_;
-    };
+	const Instance              &get_instance() const;
+	const PhysicalDevice        &get_physical_device() const;
+	const vk::Queue             &get_graphics_queue() const;
+	const vk::Queue             &get_present_queue() const;
+	const vk::Queue             &get_compute_queue() const;
+	const DeviceMemoryAllocator &get_device_memory_allocator() const;
 
-   private:
-    void createCommandPool();
-    Instance* pInstance_;
-    vk::raii::Device device_ = nullptr;
-    vk::raii::Queue graphicsQueue_ = nullptr;
-    vk::raii::Queue presentQueue_ = nullptr;
-    vk::raii::Queue computeQueue_ = nullptr;
-    vk::raii::CommandPool commandPool_ = nullptr;
-    std::unique_ptr<DeviceMemory::Allocator> pAllocator_;
+  private:
+	Instance                              &instance_;
+	PhysicalDevice                        &physical_device_;
+	std::unique_ptr<DeviceMemoryAllocator> p_device_memory_allocator_;
+	vk::Queue                              graphics_queue_ = nullptr;
+	vk::Queue                              present_queue_  = nullptr;
+	vk::Queue                              compute_queue_  = nullptr;
+	std::unique_ptr<CommandPool>           p_one_time_buf_pool_;
 };
-}  // namespace W3D
+}        // namespace W3D

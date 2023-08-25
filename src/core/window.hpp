@@ -1,36 +1,44 @@
 #pragma once
 
 #include <stdint.h>
-
-#include <functional>
-#include <memory>
 #include <vector>
 
-#include "GLFW/glfw3.h"
-
-const int DEFAULT_WIDTH = 800;
+const int DEFAULT_WIDTH  = 800;
 const int DEFAULT_HEIGHT = 600;
 
-namespace W3D {
-class Renderer;
-class Window {
-   public:
-    Window(const char* title, Renderer* pRenderer, int width = DEFAULT_WIDTH,
-           int height = DEFAULT_HEIGHT);
-    ~Window();
-    static void getRequiredExtensions(std::vector<const char*>& extensions);
-    bool shouldClose();
-    void pollEvents();
-    void waitEvents();
-    GLFWwindow* handle() {
-        return handle_;
-    };
-    void getFramebufferSize(int* width, int* height) const;
-    inline float getTime() {
-        return static_cast<float>(glfwGetTime());
-    }
+struct GLFWwindow;
 
-   private:
-    GLFWwindow* handle_;
+namespace vk
+{
+class SurfaceKHR;
+struct Extent2D;
+}        // namespace vk
+
+namespace W3D
+{
+class Renderer;
+class Instance;
+class Window
+{
+  public:
+	static const int DEFAULT_WINDOW_WIDTH;
+	static const int DEFAULT_WINDOW_HEIGHT;
+	static void      push_required_extensions(std::vector<const char *> &extensions);
+
+	Window(const char *title, int width = DEFAULT_WIDTH,
+	       int height = DEFAULT_HEIGHT);
+	~Window();
+
+	void           register_callbacks(Renderer *pRenderer);
+	vk::SurfaceKHR create_surface(Instance &instance);
+	bool           should_close();
+	void           poll_events();
+	void           wait_events();
+
+	GLFWwindow  *get_handle();
+	vk::Extent2D get_extent() const;
+
+  private:
+	GLFWwindow *handle_;
 };
-}  // namespace W3D
+}        // namespace W3D

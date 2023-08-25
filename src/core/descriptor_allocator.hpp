@@ -2,76 +2,105 @@
 
 #include <unordered_map>
 
-#include "common/common.hpp"
+#include "common/vk_common.hpp"
 
-namespace W3D {
+namespace W3D
+{
 class Device;
 
-class DescriptorAllocator {
-    struct PoolSizeFactor {
-        vk::DescriptorType type;
-        float factor;
-    };
-
-   public:
-    const static std::vector<PoolSizeFactor> DESCRIPTOR_SIZE_FACTORS;
-    const static uint32_t DEFAULT_SIZE;
-
-    DescriptorAllocator(const Device* pDevice);
-    ~DescriptorAllocator();
-
-    vk::DescriptorSet allocate(vk::DescriptorSetLayout layout);
-    void reset_pools();
-    const Device& get_device();
-
-   private:
-    const Device* pDevice_;
-    vk::DescriptorPool grab_pool();
-    vk::DescriptorPool create_pool();
-
-    vk::DescriptorPool current_pool{nullptr};
-    std::vector<vk::DescriptorPool> used_pools_;
-    std::vector<vk::DescriptorPool> free_pools_;
+struct DescriptorAllocation
+{
+	vk::DescriptorSetLayout set_layout;
+	vk::DescriptorSet       set;
 };
 
-class DescriptorLayoutCache {
-   public:
-    struct DescriptorLayoutInfo {
-        std::vector<vk::DescriptorSetLayoutBinding> bindings;
-        bool operator==(const DescriptorLayoutInfo& other) const;
-        size_t hash() const;
-    };
+class DescriptorAllocator
+{
+	struct PoolSizeFactor
+	{
+		vk::DescriptorType type;
+		float              coeff;
+	};
 
-    DescriptorLayoutCache(const Device& device);
-    vk::DescriptorSetLayout create_descriptor_layout(
-        vk::DescriptorSetLayoutCreateInfo* create_info);
+  public:
+	const static std::vector<PoolSizeFactor> DESCRIPTOR_SIZE_FACTORS;
+	const static uint32_t                    DEFAULT_SIZE;
 
-   private:
-    struct DescriptorLayoutHash {
-        std::size_t operator()(const DescriptorLayoutInfo& k) const {
-            return k.hash();
-        }
-    };
-    const Device* pDevice_;
-    std::unordered_map<DescriptorLayoutInfo, vk::raii::DescriptorSetLayout, DescriptorLayoutHash>
-        cache_;
+	DescriptorAllocator(Device &device);
+	~DescriptorAllocator();
+
+	vk::DescriptorSet allocate(vk::DescriptorSetLayout &layout);
+	void              reset_pools();
+	const Device     &get_device();
+
+  private:
+	Device            &device_;
+	vk::DescriptorPool grab_pool();
+	vk::DescriptorPool create_pool();
+
+	vk::DescriptorPool              current_pool{nullptr};
+	std::vector<vk::DescriptorPool> free_pools_;
+	std::vector<vk::DescriptorPool> used_pools_;
 };
 
-class DescriptorBuilder {
-   public:
-    static DescriptorBuilder begin(DescriptorLayoutCache* layout_cache,
-                                   DescriptorAllocator* allocator);
-    DescriptorBuilder& bind_buffer(uint32_t binding, vk::DescriptorBufferInfo* buffer_info,
-                                   vk::DescriptorType type, vk::ShaderStageFlags flasg);
-    DescriptorBuilder& bind_image(uint32_t binding, vk::DescriptorImageInfo* image_info,
-                                  vk::DescriptorType type, vk::ShaderStageFlags flags);
-    vk::DescriptorSet build(vk::DescriptorSetLayout& layout);
+class DescriptorLayoutCache
+{
+  public:
+	struct DescriptorSetLayoutDetails
+	{
+		std::vector<vk::DescriptorSetLayoutBinding> bindings;
+		bool                                        operator==(const DescriptorSetLayoutDetails &other) const;
+		size_t                                      hash() const;
+	};
 
-   private:
-    std::vector<vk::WriteDescriptorSet> writes_;
-    std::vector<vk::DescriptorSetLayoutBinding> bindings_;
+	DescriptorLayoutCache(Device &device);
+	~DescriptorLayoutCache();
 
-    DescriptorLayoutCache* pCache_;
-    DescriptorAllocator* pAllocator_;
+	vk::DescriptorSetLayout create_descriptor_layout(
+	    vk::DescriptorSetLayoutCreateInfo &layout_cinfo);
+
+  private:
+	struct DescriptorLayoutHash
+	{
+		std::size_t operator()(const DescriptorSetLayoutDetails &k) const
+		{
+			return k.hash();
+		}
+	};
+	Device &device_;
+	std::unordered_map<DescriptorSetLayoutDetails, vk::DescriptorSetLayout, DescriptorLayoutHash>
+	    cache_;
 };
-}  // namespace W3D
+
+class DescriptorBuilder
+{
+  public:
+	static DescriptorBuilder begin(DescriptorLayoutCache &layout_cache,
+	                               DescriptorAllocator   &descriptor_allocator);
+	DescriptorBuilder       &bind_buffer(uint32_t binding, vk::DescriptorBufferInfo &buffer_info,
+	                                     vk::DescriptorType type, vk::ShaderStageFlags flasg);
+	DescriptorBuilder       &bind_image(uint32_t binding, vk::DescriptorImageInfo &image_info,
+	                                    vk::DescriptorType type, vk::ShaderStageFlags flags);
+	DescriptorAllocation     build();
+
+  private:
+	DescriptorBuilder(DescriptorLayoutCache &layout_cache,
+	                  DescriptorAllocator   &descriptor_allocator);
+	std::vector<vk::WriteDescriptorSet>         writes_;
+	std::vector<vk::DescriptorSetLayoutBinding> layout_bindings_;
+
+	DescriptorLayoutCache &layout_cache_;
+	DescriptorAllocator   &allocator_;
+};
+
+struct DescriptorState
+{
+	DescriptorState(Device &device) :
+	    allocator(device),
+	    cache(device)
+	{
+	}
+	DescriptorAllocator   allocator;
+	DescriptorLayoutCache cache;
+};
+}        // namespace W3D

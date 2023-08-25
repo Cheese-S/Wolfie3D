@@ -30,6 +30,11 @@ target_include_directories(stb INTERFACE
 ${CMAKE_CURRENT_SOURCE_DIR}/stb
 )
 
+# spdlog
+add_library(spdlog INTERFACE)
+set(SPD_DIR ${CMAKE_CURRENT_SOURCE_DIR}/spdlog/include)
+target_include_directories(spdlog INTERFACE ${SPD_DIR})
+
 # vma
 add_library(vma INTERFACE)
 set(VMA_DIR ${CMAKE_CURRENT_SOURCE_DIR}/VulkanMemoryAllocator/include)
@@ -48,4 +53,5 @@ add_library(renderdoc INTERFACE)
 set(RENDERDOC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/renderdoc)
 target_sources(renderdoc INTERFACE ${RENDERDOC_DIR}/renderdoc_app.h)
 target_include_directories(renderdoc INTERFACE ${RENDERDOC_DIR})
+
 

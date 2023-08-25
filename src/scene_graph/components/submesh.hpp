@@ -1,31 +1,54 @@
 #pragma once
 
-#include <cstdint>
-
-#include "core/memory.hpp"
+#include "common/glm_common.hpp"
 #include "scene_graph/component.hpp"
 
+namespace vk
+{
+struct VertexInputAttributeDescription;
+}
 
-namespace W3D::SceneGraph {
-class Material;
-class SubMesh : public Component {
-   public:
-    SubMesh(const std::string &name = {});
+namespace W3D
+{
+class Device;
+class Buffer;
+namespace sg
+{
 
-    virtual ~SubMesh() = default;
-    virtual std::type_index get_type() override;
+struct Vertex
+{
+	glm::vec3 pos;
+	glm::vec3 norm;
+	glm::vec2 uv;
+	glm::vec4 joint;
+	glm::vec4 weight;
 
-    void set_material(const Material &material);
-    const Material *get_material() const;
-
-    std::uint32_t index_offset_ = 0;
-    std::uint32_t vertices_count_ = 0;
-    std::uint32_t vertex_indices_ = 0;
-
-    std::unique_ptr<DeviceMemory::Buffer> pVertex_buffer_;
-    std::unique_ptr<DeviceMemory::Buffer> pIndex_buffer_;
-
-   private:
-    const Material *pMaterial_{nullptr};
+	static std::array<vk::VertexInputAttributeDescription, 5> get_input_attr_descriptions();
 };
-}  // namespace W3D::SceneGraph
+
+class Material;
+class SubMesh : public Component
+{
+  public:
+	SubMesh(const std::string &name = "");
+
+	virtual ~SubMesh();
+	virtual std::type_index get_type() override;
+
+	void set_material(const Material &material);
+
+	const Material *get_material() const;
+
+	std::uint32_t index_offset_ = 0;
+	std::uint32_t vertex_count_ = 0;
+	std::uint32_t idx_count_    = 0;
+
+	std::unique_ptr<Buffer> p_vertex_buf_;
+	std::unique_ptr<Buffer> p_idx_buf_;
+
+  private:
+	const Material *p_material_ = nullptr;
+};
+
+}        // namespace sg
+}        // namespace W3D

@@ -1,17 +1,27 @@
 #pragma once
 
-#include "common/common.hpp"
+#include "common/vk_common.hpp"
+#include "core/sampler.hpp"
 #include "scene_graph/component.hpp"
 
-namespace W3D::SceneGraph {
-class Sampler : public Component {
-   public:
-    Sampler(const std::string &name, vk::raii::Sampler &&vk_sampler);
-    Sampler(Sampler &&other) = default;
+namespace W3D
+{
+class Device;
 
-    virtual ~Sampler() = default;
-    virtual std::type_index get_type() override;
+namespace sg
+{
+class Sampler : public Component
+{
+  public:
+	Sampler(const Device &device, const std::string &name, vk::SamplerCreateInfo &sampler_cinfo);
 
-    vk::raii::Sampler vk_sampler_ = nullptr;
+	virtual ~Sampler() override = default;
+	virtual std::type_index get_type() override;
+	vk::Sampler             get_handle();
+
+  private:
+	const Device &device_;
+	W3D::Sampler  sampler_;
 };
-}  // namespace W3D::SceneGraph
+}        // namespace sg
+}        // namespace W3D

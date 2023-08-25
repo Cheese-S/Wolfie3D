@@ -1,19 +1,12 @@
 
 #include "instance.hpp"
 
-#include <stdint.h>
-
-#include <cstring>
-#include <memory>
-#include <set>
-#include <stdexcept>
-#include <string>
-#include <utility>
-#include <vector>
-
-#include "GLFW/glfw3.h"
 #include "common/common.hpp"
-#include "vulkan/vulkan_core.h"
+#include "common/logging.hpp"
+#include "common/utils.hpp"
+
+#include "device.hpp"
+#include "physical_device.hpp"
 #include "window.hpp"
 
 #ifdef NDEBUG
@@ -22,204 +15,241 @@ constexpr const bool ENABLE_VALIDATION_LAYERS = false;
 constexpr const bool ENABLE_VALIDATION_LAYERS = true;
 #endif
 
-const std::vector<const char*> VALIDATION_LAYERS = {"VK_LAYER_KHRONOS_validation"};
-const std::vector<const char*> DEVICE_EXTENSIONS = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+PFN_vkCreateDebugUtilsMessengerEXT  create_debug_utils_messenger;
+PFN_vkDestroyDebugUtilsMessengerEXT destory_debug_utils_messenger;
 
-// Proxy function to manually load an extension function
-VkResult CreateDebugUtilsMessengerEXT(VkInstance instance,
-                                      const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo,
-                                      const VkAllocationCallbacks* pAllocator,
-                                      VkDebugUtilsMessengerEXT* pDebugMessenger) {
-    auto func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(
-        instance, "vkCreateDebugUtilsMessengerEXT");
-    if (func != nullptr) {
-        return func(instance, pCreateInfo, pAllocator, pDebugMessenger);
-    } else {
-        return VK_ERROR_EXTENSION_NOT_PRESENT;
-    }
+VKAPI_ATTR VkResult VKAPI_CALL vkCreateDebugUtilsMessengerEXT(VkInstance                                instance,
+                                                              const VkDebugUtilsMessengerCreateInfoEXT *pCreateInfo,
+                                                              const VkAllocationCallbacks              *pAllocator,
+                                                              VkDebugUtilsMessengerEXT                 *pMessenger)
+{
+	return create_debug_utils_messenger(instance, pCreateInfo, pAllocator, pMessenger);
 }
 
-bool isValidationLayerSupported() {
-    auto layers = vk::enumerateInstanceLayerProperties();
-
-    for (const char* layerName : VALIDATION_LAYERS) {
-        bool layerFound = false;
-
-        for (const auto& layerProperties : layers) {
-            if (!strcmp(layerName, layerProperties.layerName)) {
-                layerFound = true;
-                break;
-            }
-        }
-
-        if (!layerFound) {
-            return false;
-        }
-    }
-
-    return true;
+VKAPI_ATTR void VKAPI_CALL vkDestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT messenger, VkAllocationCallbacks const *pAllocator)
+{
+	return destory_debug_utils_messenger(instance, messenger, pAllocator);
 }
 
-namespace W3D {
+namespace W3D
+{
 
-Instance::Instance(Window* pWindow) {
-    createInstance();
-    createSurface(pWindow);
-    pickPhysicalDevice();
+const std::vector<const char *> Instance::VALIDATION_LAYERS = {
+    "VK_LAYER_KHRONOS_validation",
+};
+
+Instance::Instance(const std::string &app_name, Window &window)
+{
+	create_instance(app_name);
+	surface_ = window.create_surface(*this);
 }
 
-void Instance::createInstance() {
-    if (ENABLE_VALIDATION_LAYERS && !isValidationLayerSupported()) {
-        throw std::runtime_error("validation layers requested, but not avaliable!");
-    };
-
-    vk::ApplicationInfo appInfo{};
-
-    appInfo.pApplicationName = APP_NAME;
-    appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
-    appInfo.pEngineName = "No Engine";
-    appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
-    appInfo.apiVersion = VK_API_VERSION_1_2;
-
-    vk::InstanceCreateInfo createInfo({vk::InstanceCreateFlagBits::eEnumeratePortabilityKHR},
-                                      &appInfo);
-
-    std::vector<const char*> extensions;
-    if (ENABLE_VALIDATION_LAYERS) {
-        extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-    }
-    // extensions.push_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
-    Window::getRequiredExtensions(extensions);
-    createInfo.enabledExtensionCount = extensions.size();
-    createInfo.ppEnabledExtensionNames = extensions.data();
-
-    vk::DebugUtilsMessengerCreateInfoEXT debugCreateInfo;
-    if (ENABLE_VALIDATION_LAYERS) {
-        createInfo.enabledLayerCount = static_cast<uint32_t>(VALIDATION_LAYERS.size());
-        createInfo.ppEnabledLayerNames = VALIDATION_LAYERS.data();
-        populateDebugMessengerCreateInfo(debugCreateInfo);
-        createInfo.pNext = &debugCreateInfo;
-    } else {
-        createInfo.enabledLayerCount = 0;
-        createInfo.pNext = nullptr;
-    }
-
-    instance_ = vk::raii::Instance(context_, createInfo);
-
-    if (ENABLE_VALIDATION_LAYERS) {
-        initDebugMessenger();
-    }
+Instance::~Instance()
+{
+	if (ENABLE_VALIDATION_LAYERS)
+	{
+		handle_.destroyDebugUtilsMessengerEXT(debug_messenger_);
+	}
+	handle_.destroySurfaceKHR();
+	handle_.destroy();
 }
 
-void Instance::initDebugMessenger() {
-    vk::DebugUtilsMessengerCreateInfoEXT debugCreateInfo;
-    populateDebugMessengerCreateInfo(debugCreateInfo);
-    debugMessenger_ = vk::raii::DebugUtilsMessengerEXT(instance_, debugCreateInfo);
+void Instance::create_instance(const std::string &app_name)
+{
+	if (ENABLE_VALIDATION_LAYERS && !is_validation_layer_supported())
+	{
+		throw std::runtime_error("validation layers requested, but not avaliable!");
+	};
+
+	vk::ApplicationInfo app_info{
+	    .pApplicationName   = app_name.c_str(),
+	    .applicationVersion = VK_MAKE_VERSION(1, 0, 0),
+	    .pEngineName        = "No Engine",
+	    .engineVersion      = VK_MAKE_VERSION(1, 0, 0),
+	    .apiVersion         = VK_API_VERSION_1_2,
+	};
+
+	std::vector<const char *> extensions = get_required_extensions();
+	std::vector<const char *> layers     = get_required_layers();
+
+	vk::InstanceCreateInfo instance_cinfo{
+	    .flags                   = IS_ON_OSX ? vk::InstanceCreateFlags{vk::InstanceCreateFlagBits::eEnumeratePortabilityKHR} : vk::InstanceCreateFlags{},
+	    .pApplicationInfo        = &app_info,
+	    .enabledLayerCount       = to_u32(layers.size()),
+	    .ppEnabledLayerNames     = layers.data(),
+	    .enabledExtensionCount   = to_u32(extensions.size()),
+	    .ppEnabledExtensionNames = extensions.data(),
+	};
+
+	vk::DebugUtilsMessengerCreateInfoEXT debug_cinfo;
+	if (ENABLE_VALIDATION_LAYERS)
+	{
+		populate_debug_messenger_create_info(debug_cinfo);
+		instance_cinfo.pNext = &debug_cinfo;
+	}
+	handle_ = vk::createInstance(instance_cinfo);
+	load_functionn_ptrs();
+
+	if (ENABLE_VALIDATION_LAYERS)
+	{
+		init_debug_messenger();
+	}
 }
 
-void Instance::populateDebugMessengerCreateInfo(vk::DebugUtilsMessengerCreateInfoEXT& createInfo) {
-    using SeverityFlagBits = vk::DebugUtilsMessageSeverityFlagBitsEXT;
-    using MessageTypeBits = vk::DebugUtilsMessageTypeFlagBitsEXT;
-    createInfo.messageSeverity =
-        SeverityFlagBits::eInfo | SeverityFlagBits::eError | SeverityFlagBits::eVerbose;
-    createInfo.messageType =
-        MessageTypeBits::eGeneral | MessageTypeBits::ePerformance | MessageTypeBits::eValidation;
-    createInfo.pfnUserCallback = Instance::debugCallback;
+std::vector<const char *> Instance::get_required_extensions()
+{
+	std::vector<const char *> extensions;
+
+	if (ENABLE_VALIDATION_LAYERS)
+	{
+		extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+	}
+
+	if (IS_ON_OSX)
+	{
+		extensions.push_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+		extensions.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+	}
+
+	Window::push_required_extensions(extensions);
+
+	return extensions;
 }
 
-inline VKAPI_ATTR VkBool32 VKAPI_CALL Instance::debugCallback(
-    VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
-    VkDebugUtilsMessageTypeFlagsEXT messageType,
-    const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData) {
-    std::cerr << "validation layer: " << pCallbackData->pMessage << std::endl;
-    return VK_FALSE;
+std::vector<const char *> Instance::get_required_layers()
+{
+	std::vector<const char *> layers;
+
+	if (ENABLE_VALIDATION_LAYERS)
+	{
+		for (const char *layer_name : VALIDATION_LAYERS)
+		{
+			layers.push_back(layer_name);
+		}
+	}
+
+	return layers;
 }
 
-void Instance::createSurface(Window* pWindow) {
-    VkSurfaceKHR surface;
-    auto window_handle = pWindow->handle();
-    if (glfwCreateWindowSurface(*instance_, window_handle, nullptr, &surface) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create window surface!");
-    }
-    surface_ = vk::raii::SurfaceKHR(instance_, surface);
+bool Instance::is_validation_layer_supported()
+{
+	auto layers = vk::enumerateInstanceLayerProperties();
+
+	for (const char *layer_name : VALIDATION_LAYERS)
+	{
+		bool layer_found = false;
+
+		for (const auto &layerProperties : layers)
+		{
+			if (!strcmp(layer_name, layerProperties.layerName))
+			{
+				layer_found = true;
+				break;
+			}
+		}
+
+		if (!layer_found)
+		{
+			return false;
+		}
+	}
+
+	return true;
 }
 
-void Instance::pickPhysicalDevice() {
-    auto physicalDevices = instance_.enumeratePhysicalDevices();
-    if (!physicalDevices.size()) {
-        throw std::runtime_error("failed to find GPUs with Vulkan Support");
-    }
+void Instance::load_functionn_ptrs()
+{
+	create_debug_utils_messenger = reinterpret_cast<PFN_vkCreateDebugUtilsMessengerEXT>(handle_.getProcAddr("vkCreateDebugUtilsMessengerEXT"));
 
-    for (auto& device : physicalDevices) {
-        if (isPhysicalDeviceSuitable(device)) {
-            physicalDevice_ = vk::raii::PhysicalDevice(std::move(device));
-            indices_ = findQueueFamilies(physicalDevice_);
-            uniqueQueueFamilies_.emplace(indices_.computeFamily.value());
-            uniqueQueueFamilies_.emplace(indices_.graphicsFamily.value());
-            uniqueQueueFamilies_.emplace(indices_.presentFamily.value());
-            properties_ = physicalDevice_.getProperties();
-            features_ = physicalDevice_.getFeatures();
-            return;
-        }
-    }
+	if (!create_debug_utils_messenger)
+	{
+		LOGE("Failed to laod vkCreateDebugUtilsMessengerEXT!");
+		abort();
+	}
 
-    throw std::runtime_error("failed to find a suitable GPU!");
+	destory_debug_utils_messenger = reinterpret_cast<PFN_vkDestroyDebugUtilsMessengerEXT>(handle_.getProcAddr("vkDestroyDebugUtilsMessengerEXT"));
+
+	if (!destory_debug_utils_messenger)
+	{
+		LOGE("Failed to load vkDestroyDebugUtilsMessengerEXT!");
+		abort();
+	}
 }
 
-bool Instance::isPhysicalDeviceSuitable(const vk::raii::PhysicalDevice& device) {
-    QueueFamilyIndices indices = findQueueFamilies(device);
-    bool isExtensionSupported = checkPhysicalDeviceExtensionSupport(device);
-    bool isSwapChainSupported = false;
-    if (isExtensionSupported) {
-        SwapchainSupportDetails details = queryPhysicalDeviceSwapchainSupport(device);
-        isSwapChainSupported = !details.formats.empty() && !details.presentModes.empty();
-    }
-    auto supportedFeatures = device.getFeatures();
-    return indices.isCompelete() && isExtensionSupported && isSwapChainSupported &&
-           supportedFeatures.samplerAnisotropy;
+void Instance::init_debug_messenger()
+{
+	vk::DebugUtilsMessengerCreateInfoEXT debug_cinfo;
+	populate_debug_messenger_create_info(debug_cinfo);
+	debug_messenger_ = handle_.createDebugUtilsMessengerEXT(debug_cinfo);
 }
 
-bool Instance::checkPhysicalDeviceExtensionSupport(const vk::raii::PhysicalDevice& device) {
-    auto avaliableExtensions = device.enumerateDeviceExtensionProperties();
-    std::set<std::string> requiredExtensions(DEVICE_EXTENSIONS.begin(), DEVICE_EXTENSIONS.end());
-    for (const auto& extension : avaliableExtensions) {
-        requiredExtensions.erase(extension.extensionName);
-    }
-    return requiredExtensions.empty();
+void Instance::populate_debug_messenger_create_info(vk::DebugUtilsMessengerCreateInfoEXT &createInfo)
+{
+	using SeverityFlagBits = vk::DebugUtilsMessageSeverityFlagBitsEXT;
+	using MessageTypeBits  = vk::DebugUtilsMessageTypeFlagBitsEXT;
+	createInfo.messageSeverity =
+	    SeverityFlagBits::eInfo | SeverityFlagBits::eError | SeverityFlagBits::eVerbose;
+	createInfo.messageType =
+	    MessageTypeBits::eGeneral | MessageTypeBits::ePerformance | MessageTypeBits::eValidation;
+	createInfo.pfnUserCallback = Instance::debug_callback;
 }
 
-SwapchainSupportDetails Instance::queryPhysicalDeviceSwapchainSupport(
-    const vk::raii::PhysicalDevice& device) const {
-    SwapchainSupportDetails details;
-    details.capabilities = device.getSurfaceCapabilitiesKHR(*surface_);
-    details.formats = device.getSurfaceFormatsKHR(*surface_);
-    details.presentModes = device.getSurfacePresentModesKHR(*surface_);
-    return details;
+inline VKAPI_ATTR VkBool32 VKAPI_CALL Instance::debug_callback(
+    VkDebugUtilsMessageSeverityFlagBitsEXT      message_severity,
+    VkDebugUtilsMessageTypeFlagsEXT             message_type,
+    const VkDebugUtilsMessengerCallbackDataEXT *p_callback_data, void *p_user_data)
+{
+	if (message_severity == VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)
+	{
+		LOGE("{} - {}: {}", p_callback_data->messageIdNumber, p_callback_data->pMessageIdName, p_callback_data->pMessage);
+	}
+	else if (message_severity == VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
+	{
+		LOGW("{} - {}: {}", p_callback_data->messageIdNumber, p_callback_data->pMessageIdName, p_callback_data->pMessage);
+	}
+	return VK_FALSE;
 }
 
-QueueFamilyIndices Instance::findQueueFamilies(const vk::raii::PhysicalDevice& device) {
-    QueueFamilyIndices indices;
-    auto queueFamilies = device.getQueueFamilyProperties();
-    for (size_t i = 0; i < queueFamilies.size(); i++) {
-        const auto& queueFamily = queueFamilies[i];
-        if (queueFamily.queueFlags & vk::QueueFlagBits::eGraphics) {
-            indices.graphicsFamily = i;
-        }
+std::unique_ptr<PhysicalDevice> Instance::pick_physical_device()
+{
+	auto physical_device_handles = handle_.enumeratePhysicalDevices();
+	if (!physical_device_handles.size())
+	{
+		LOGE("failed to find GPUs with Vulkan Support");
+		abort();
+	}
 
-        if (queueFamily.queueFlags & vk::QueueFlagBits::eCompute) {
-            indices.computeFamily = i;
-        }
+	for (auto physical_device_handle : physical_device_handles)
+	{
+		PhysicalDevice physical_device = PhysicalDevice(physical_device_handle, *this);
+		if (is_physical_device_suitable(physical_device))
+		{
+			return std::make_unique<PhysicalDevice>(std::move(physical_device));
+		}
+	}
 
-        auto isPresentSupported = device.getSurfaceSupportKHR(i, *surface_);
-
-        if (isPresentSupported) {
-            indices.presentFamily = i;
-        }
-
-        if (indices.isCompelete()) {
-            break;
-        }
-    }
-    return indices;
+	throw std::runtime_error("failed to find a suitable GPU!");
 }
-}  // namespace W3D
+
+bool Instance::is_physical_device_suitable(const PhysicalDevice &physical_device)
+{
+	const auto &indices                 = physical_device.get_queue_family_indices();
+	bool        is_extensions_supported = physical_device.is_all_extensions_supported(Device::REQUIRED_EXTENSIONS);
+	bool        is_swap_chain_supported = false;
+	if (is_extensions_supported)
+	{
+		const auto &details     = physical_device.get_swapchain_support_details();
+		is_swap_chain_supported = !details.formats.empty() && !details.present_modes.empty();
+	}
+	auto supportedFeatures = physical_device.get_handle().getFeatures();
+
+	return indices.is_complete() && is_extensions_supported && is_swap_chain_supported &&
+	       supportedFeatures.samplerAnisotropy;
+}
+
+const vk::SurfaceKHR &Instance::get_surface() const
+{
+	return surface_;
+}
+
+}        // namespace W3D

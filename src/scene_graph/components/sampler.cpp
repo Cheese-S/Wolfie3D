@@ -1,10 +1,21 @@
 #include "sampler.hpp"
 
-namespace W3D::SceneGraph {
-Sampler::Sampler(const std::string &name, vk::raii::Sampler &&vk_sampler)
-    : Component(name), vk_sampler_(std::move(vk_sampler)){};
+#include "core/device.hpp"
 
-std::type_index Sampler::get_type() {
-    return typeid(Sampler);
+namespace W3D::sg
+{
+Sampler::Sampler(const Device &device, const std::string &name, vk::SamplerCreateInfo &sampler_cinfo) :
+    Component(name),
+    device_(device),
+    sampler_(device_, sampler_cinfo){};
+
+std::type_index Sampler::get_type()
+{
+	return typeid(Sampler);
 }
-}  // namespace W3D::SceneGraph
+
+vk::Sampler Sampler::get_handle()
+{
+	return sampler_.get_handle();
+}
+}        // namespace W3D::sg

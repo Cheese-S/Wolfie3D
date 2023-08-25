@@ -4,9 +4,6 @@ layout(location = 0) in vec3 fragUVW;
 
 layout(set = 0, binding = 0) uniform samplerCube samplerCubeMap; 
 
-// layout(set = 1, binding = 2) uniform sampler2D ao_sampler;
-// layout(set = 1, binding = 3) uniform sampler2D metal_roughness_sampler;
-
 layout(location = 0) out vec4 out_color;
 
 #define PI 3.1415926535897932384626433832795

@@ -2,26 +2,29 @@
 
 #include "scene_graph/component.hpp"
 
-namespace W3D::SceneGraph {
-class Image;
+namespace W3D
+{
+
+class ImageResource;
 class Sampler;
 
-class Texture : public Component {
-   public:
-    Texture(const std::string &name);
-    Texture(Texture &&other) = default;
+namespace sg
+{
 
-    virtual ~Texture() = default;
-    virtual std::type_index get_type() override;
+class Texture : public Component
+{
+  public:
+	Texture(const std::string &name);
+	Texture(Texture &&other) = default;
 
-    void set_image(Image &image);
-    void set_sampler(Sampler &sampler);
+	virtual ~Texture() = default;
+	virtual std::type_index get_type() override;
 
-    Image *get_image();
-    Sampler *get_sampler();
+	ImageResource *p_resource_ = nullptr;
+	Sampler       *p_sampler_  = nullptr;
 
-   private:
-    Image *pImage_{nullptr};
-    Sampler *pSampler_{nullptr};
+  private:
 };
-};  // namespace W3D::SceneGraph
+}        // namespace sg
+
+};        // namespace W3D

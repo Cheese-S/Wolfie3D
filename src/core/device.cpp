@@ -1,102 +1,122 @@
 #include "device.hpp"
 
-#include <memory>
-#include <set>
-#include <vector>
-
+#include "command_buffer.hpp"
+#include "command_pool.hpp"
+#include "common/common.hpp"
+#include "common/utils.hpp"
 #include "instance.hpp"
-#include "memory.hpp"
-#include "vulkan/vulkan_structs.hpp"
+#include "physical_device.hpp"
 
-namespace W3D {
-Device::Device(Instance* pInstance) {
-    pInstance_ = pInstance;
-    auto indices = pInstance_->queueFamilyIndices();
-    std::vector<vk::DeviceQueueCreateInfo> queueCreateInfos;
-    std::set<uint32_t> uniqueQueueFamilies = {indices.computeFamily.value(),
-                                              indices.graphicsFamily.value(),
-                                              indices.presentFamily.value()};
+#include <set>
 
-    float priority = 1.0f;
-    for (uint32_t familyIndex : uniqueQueueFamilies) {
-        queueCreateInfos.push_back(vk::DeviceQueueCreateInfo({}, familyIndex, 1, &priority));
-    }
-
-    vk::PhysicalDeviceFeatures features;
-    features.samplerAnisotropy = VK_TRUE;
-    features.sampleRateShading = VK_TRUE;
-
-    auto createInfo =
-        vk::DeviceCreateInfo({}, queueCreateInfos, VALIDATION_LAYERS, DEVICE_EXTENSIONS, &features);
-
-    device_ = vk::raii::Device(pInstance_->physicalDevice(), createInfo);
-    graphicsQueue_ = vk::raii::Queue(device_, indices.graphicsFamily.value(), 0);
-    presentQueue_ = vk::raii::Queue(device_, indices.presentFamily.value(), 0);
-    graphicsQueue_ = vk::raii::Queue(device_, indices.computeFamily.value(), 0);
-
-    createCommandPool();
-    pAllocator_ = std::make_unique<DeviceMemory::Allocator>(*pInstance, *this);
-}
-
-void Device::createCommandPool() {
-    QueueFamilyIndices indices = pInstance_->queueFamilyIndices();
-    vk::CommandPoolCreateInfo poolInfo(vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
-                                       indices.graphicsFamily.value());
-    commandPool_ = device_.createCommandPool(poolInfo);
-}
-
-vk::raii::ImageView Device::createImageView(VkImage image, vk::Format format,
-                                            vk::ImageAspectFlags aspectFlags,
-                                            vk::ImageViewType view_type, uint32_t mipLevels) const {
-    vk::ImageViewCreateInfo viewInfo{};
-    viewInfo.image = image;
-    viewInfo.viewType = view_type;
-    viewInfo.format = format;
-    viewInfo.subresourceRange.aspectMask = aspectFlags;
-    viewInfo.subresourceRange.baseMipLevel = 0;
-    viewInfo.subresourceRange.levelCount = mipLevels;
-    viewInfo.subresourceRange.baseArrayLayer = 0;
-    viewInfo.subresourceRange.layerCount = view_type == vk::ImageViewType::eCube ? 6 : 1;
-    return device_.createImageView(viewInfo);
+namespace W3D
+{
+const std::vector<const char *> Device::REQUIRED_EXTENSIONS = {
+    VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+#ifdef __IS_ON_OSX__
+    "VK_KHR_portability_subset"
+#endif
 };
 
-std::vector<vk::raii::CommandBuffer> Device::allocateCommandBuffers(
-    vk::CommandBufferAllocateInfo& allocInfo) {
-    allocInfo.commandPool = *commandPool_;
-    return device_.allocateCommandBuffers(allocInfo);
+Device::Device(Instance &instance, PhysicalDevice &physical_device) :
+    instance_(instance),
+    physical_device_(physical_device)
+{
+	QueueFamilyIndices indices        = physical_device.get_queue_family_indices();
+	std::set<uint32_t> unique_indices = {indices.compute_index.value(), indices.graphics_index.value(), indices.present_index.value()};
+
+	std::vector<vk::DeviceQueueCreateInfo> queue_cinfos;
+	float                                  priority = 1.0f;
+	for (uint32_t index : unique_indices)
+	{
+		vk::DeviceQueueCreateInfo queue_cinfo{};
+		queue_cinfo.queueFamilyIndex = index;
+		queue_cinfo.queueCount       = 1;
+		queue_cinfo.pQueuePriorities = &priority;
+		queue_cinfos.push_back(queue_cinfo);
+	}
+
+	vk::PhysicalDeviceFeatures required_features;
+	required_features.samplerAnisotropy = true;
+	required_features.sampleRateShading = true;
+
+	vk::DeviceCreateInfo device_cinfo{
+	    .flags                   = {},
+	    .queueCreateInfoCount    = to_u32(queue_cinfos.size()),
+	    .pQueueCreateInfos       = queue_cinfos.data(),
+	    .enabledLayerCount       = to_u32(instance_.VALIDATION_LAYERS.size()),
+	    .ppEnabledLayerNames     = instance_.VALIDATION_LAYERS.data(),
+	    .enabledExtensionCount   = to_u32(REQUIRED_EXTENSIONS.size()),
+	    .ppEnabledExtensionNames = REQUIRED_EXTENSIONS.data(),
+	    .pEnabledFeatures        = &required_features,
+	};
+
+	handle_ = physical_device.get_handle().createDevice(device_cinfo);
+
+	graphics_queue_ = handle_.getQueue(indices.graphics_index.value(), 0);
+	present_queue_  = handle_.getQueue(indices.present_index.value(), 0);
+	compute_queue_  = handle_.getQueue(indices.compute_index.value(), 0);
+
+	p_device_memory_allocator_ = std::make_unique<DeviceMemoryAllocator>(*this);
+	p_one_time_buf_pool_       = std::make_unique<CommandPool>(*this, graphics_queue_, indices.graphics_index.value(), CommandPoolResetStrategy::eIndividual, vk::CommandPoolCreateFlagBits::eResetCommandBuffer | vk::CommandPoolCreateFlagBits::eTransient);
 }
 
-// A Wrapper to avoid exceptions. Instead, we return proper error codes.
-// For discussion, see https://github.com/KhronosGroup/Vulkan-Hpp/issues/599
-vk::Result Device::presentKHR(const vk::PresentInfoKHR& presentInfo) {
-    return static_cast<vk::Result>(presentQueue_.getDispatcher()->vkQueuePresentKHR(
-        static_cast<VkQueue>(*presentQueue_),
-        reinterpret_cast<const VkPresentInfoKHR*>(&presentInfo)));
+Device::~Device()
+{
+	handle_.destroy();
 }
 
-void Device::transferBuffer(DeviceMemory::Buffer* src, DeviceMemory::Buffer* dst,
-                            const vk::BufferCopy& copyRegion) {
-    auto commandBuffer = beginOneTimeCommands();
-    commandBuffer.copyBuffer(src->handle(), dst->handle(), copyRegion);
-    endOneTimeCommands(commandBuffer);
+CommandBuffer Device::begin_one_time_buf() const
+{
+	CommandBuffer cmd_buf = p_one_time_buf_pool_->allocate_command_buffer();
+	cmd_buf.begin(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
+	return cmd_buf;
 }
 
-vk::raii::CommandBuffer Device::beginOneTimeCommands() const {
-    vk::CommandBufferAllocateInfo allocInfo(*commandPool_, vk::CommandBufferLevel::ePrimary, 1);
-    auto commandBuffer = std::move(device_.allocateCommandBuffers(allocInfo)[0]);
-    vk::CommandBufferBeginInfo beginInfo(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
-    commandBuffer.begin(beginInfo);
-    return commandBuffer;
-};
+void Device::end_one_time_buf(CommandBuffer &cmd_buf) const
+{
+	const auto &cmd_buf_handle = cmd_buf.get_handle();
+	cmd_buf_handle.end();
+	vk::SubmitInfo submit_info{
+	    .pWaitSemaphores    = nullptr,
+	    .pWaitDstStageMask  = nullptr,
+	    .commandBufferCount = 1,
+	    .pCommandBuffers    = &cmd_buf_handle,
+	};
 
-void Device::endOneTimeCommands(vk::raii::CommandBuffer& commandBuffer) const {
-    commandBuffer.end();
-    vk::SubmitInfo submitInfo;
-    submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &(*commandBuffer);
-
-    graphicsQueue_.submit(submitInfo);
-    graphicsQueue_.waitIdle();
+	graphics_queue_.submit(submit_info);
+	graphics_queue_.waitIdle();
+	p_one_time_buf_pool_->free_command_buffer(cmd_buf);
 }
 
-}  // namespace W3D
+const Instance &Device::get_instance() const
+{
+	return instance_;
+}
+
+const PhysicalDevice &Device::get_physical_device() const
+{
+	return physical_device_;
+}
+
+const vk::Queue &Device::get_graphics_queue() const
+{
+	return graphics_queue_;
+}
+
+const vk::Queue &Device::get_present_queue() const
+{
+	return present_queue_;
+}
+
+const vk::Queue &Device::get_compute_queue() const
+{
+	return compute_queue_;
+}
+
+const DeviceMemoryAllocator &Device::get_device_memory_allocator() const
+{
+	return *p_device_memory_allocator_;
+}
+
+}        // namespace W3D
