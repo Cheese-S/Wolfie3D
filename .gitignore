@@ -1,5 +1,5 @@
 build/
-assets/
+assets/models/*
 lib/
 .vscode/
 .cache/
