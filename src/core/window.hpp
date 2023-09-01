@@ -29,8 +29,9 @@ class Window
 	       int height = DEFAULT_HEIGHT);
 	~Window();
 
-	void           register_callbacks(Renderer *pRenderer);
+	void           register_callbacks(Renderer &renderer);
 	vk::SurfaceKHR create_surface(Instance &instance);
+	vk::Extent2D   wait_for_non_zero_extent();
 	bool           should_close();
 	void           poll_events();
 	void           wait_events();

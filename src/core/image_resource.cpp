@@ -11,6 +11,17 @@
 namespace W3D
 {
 
+uint8_t ImageResource::format_to_bits_per_pixel(vk::Format format)
+{
+	// TODO: add other formats
+	static std::unordered_map<vk::Format, uint32_t> conversion_map{
+	    {vk::Format::eR32G32B32A32Sfloat, 16},
+	    {vk::Format::eR8G8B8A8Srgb, 4},
+	};
+
+	return conversion_map[format];
+}
+
 ImageLoadResult ImageResource::load_two_dim_image(const Device &device, const std::string &path)
 {
 	ImageTransferInfo img_tinfo = stb_load(path);

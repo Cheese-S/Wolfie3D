@@ -8,10 +8,10 @@ layout(push_constant) uniform PCO {
     mat4 proj;
 } pco;
 
-layout(location = 0) out vec3 fragUVW;
+layout(location = 0) out vec3 frag_uvw;
 
 
 void main() {
     gl_Position = pco.proj * vec4(position, 1.0);
-    fragUVW = position;
+    frag_uvw = position;
 }

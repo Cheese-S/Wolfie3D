@@ -1,8 +1,9 @@
 #pragma once
 
 #include "common/vk_common.hpp"
-
 #include "device_memory/image.hpp"
+
+#include <memory>
 
 namespace W3D
 {
@@ -25,6 +26,8 @@ class ImageView;
 class ImageResource
 {
   public:
+	static uint8_t format_to_bits_per_pixel(vk::Format format);
+
 	static ImageLoadResult load_two_dim_image(const Device &device, const std::string &path);
 	static ImageLoadResult load_cubic_image(const Device &device, const std::string &path);
 

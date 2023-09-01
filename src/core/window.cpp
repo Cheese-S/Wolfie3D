@@ -17,13 +17,6 @@ namespace W3D
 const int Window::DEFAULT_WINDOW_WIDTH  = 800;
 const int Window::DEFAULT_WINDOW_HEIGHT = 600;
 
-void resize_callback(GLFWwindow *window, int width, int height)
-{
-	ResizeEvent event;
-	Renderer   *p_renderer = reinterpret_cast<Renderer *>(glfwGetWindowUserPointer(window));
-	p_renderer->process_event(event);
-}
-
 inline KeyCode translate_key_code(int key)
 {
 	static const std::unordered_map<int, KeyCode> key_lookup = {
@@ -90,13 +83,20 @@ inline MouseButton translate_mouse_button(int button)
 	return MouseButton::eUnknown;
 }
 
+void resize_callback(GLFWwindow *window, int width, int height)
+{
+	ResizeEvent event;
+	Renderer   *p_renderer = reinterpret_cast<Renderer *>(glfwGetWindowUserPointer(window));
+	p_renderer->process_event(event);
+}
+
 void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods)
 {
 	KeyCode   key_code   = translate_key_code(key);
 	KeyAction key_action = translate_key_action(action);
-	auto      pRenderer  = reinterpret_cast<Renderer *>(glfwGetWindowUserPointer(window));
+	Renderer *p_renderer = reinterpret_cast<Renderer *>(glfwGetWindowUserPointer(window));
 
-	pRenderer->process_event(KeyInputEvent(key_code, key_action));
+	p_renderer->process_event(KeyInputEvent(key_code, key_action));
 }
 
 void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
@@ -147,9 +147,9 @@ Window::~Window()
 	glfwTerminate();
 }
 
-void Window::register_callbacks(Renderer *pRenderer)
+void Window::register_callbacks(Renderer &renderer)
 {
-	glfwSetWindowUserPointer(handle_, pRenderer);
+	glfwSetWindowUserPointer(handle_, &renderer);
 	glfwSetFramebufferSizeCallback(handle_, resize_callback);
 	glfwSetKeyCallback(handle_, key_callback);
 	glfwSetMouseButtonCallback(handle_, mouse_button_callback);
@@ -165,6 +165,21 @@ vk::SurfaceKHR Window::create_surface(Instance &instance)
 		throw std::runtime_error("Unrecoverable error");
 	}
 	return vk::SurfaceKHR(surface);
+}
+
+vk::Extent2D Window::wait_for_non_zero_extent()
+{
+	int width, height;
+	glfwGetFramebufferSize(handle_, &width, &height);
+	while (!width || !height)
+	{
+		glfwGetFramebufferSize(handle_, &width, &height);
+		glfwWaitEvents();
+	}
+	return vk::Extent2D{
+	    .width  = to_u32(width),
+	    .height = to_u32(height),
+	};
 }
 
 bool Window::should_close()
@@ -184,8 +199,7 @@ void Window::wait_events()
 
 vk::Extent2D Window::get_extent() const
 {
-	vk::Extent2D extent;
-	int          width, height;
+	int width, height;
 	glfwGetFramebufferSize(handle_, &width, &height);
 	return vk::Extent2D{to_u32(width), to_u32(height)};
 }

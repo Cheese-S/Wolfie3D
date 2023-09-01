@@ -2,31 +2,37 @@
 
 layout(location = 0) in vec3 in_normal;
 layout(location = 1) in vec2 in_uv;
-layout(location = 2) in vec3 fragUVW;
-
-layout(push_constant) uniform PushConstantObject {
-    layout (offset = 64) vec3 cam_pos;
-} pco; 
+layout(location = 2) in vec3 frag_uvw;
 
 
+layout(set = 0, binding = 0) uniform UBO {
+    layout(offset = 64) vec3 cam_pos;
+} ubo;
+
+// global descriptors
 layout(set = 0, binding = 1) uniform samplerCube irradiance_sampler;
 layout(set = 0, binding = 2) uniform samplerCube prefilter_sampler;
 layout(set = 0, binding = 3) uniform sampler2D brdf_sampler;
 
+// material descriptors
 layout(set = 1, binding = 0) uniform sampler2D color_sampler;
 layout(set = 1, binding = 1) uniform sampler2D normal_sampler;
 layout(set = 1, binding = 2) uniform sampler2D ao_sampler;
-layout(set = 1, binding = 3) uniform sampler2D metal_roughness_sampler;
+layout(set = 1, binding = 3) uniform sampler2D emission_sampler;
+layout(set = 1, binding = 4) uniform sampler2D metallic_roughness_sampler;
 
 #define PI 3.1415926535897932384626433832795
 layout(location = 0) out vec4 out_color;
 
-vec3 getNormalFromMap()
+const float OCCLUSION_STRENGTH = 1.0f;
+const float EMISSIVE_STRENGTH = 1.0f;
+
+vec3 get_normal_from_map()
 {
     vec3 tangentNormal = texture(normal_sampler, in_uv).xyz * 2.0 - 1.0;
 
-    vec3 Q1  = dFdx(fragUVW);
-    vec3 Q2  = dFdy(fragUVW);
+    vec3 Q1  = dFdx(frag_uvw);
+    vec3 Q2  = dFdy(frag_uvw);
     vec2 st1 = dFdx(in_uv);
     vec2 st2 = dFdy(in_uv);
 
@@ -67,7 +73,7 @@ vec3 F_SchlickR(float cosTheta, vec3 F0, float roughness)
 	return F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(1.0 - cosTheta, 5.0);
 }
 
-vec3 prefilteredReflection(vec3 R, float roughness) {
+vec3 prefilter_reflection(vec3 R, float roughness) {
     const float MAX_REFLECTION_LOD = 9.0;
     float lod = roughness * MAX_REFLECTION_LOD;
     float lodf = floor(lod);
@@ -77,7 +83,7 @@ vec3 prefilteredReflection(vec3 R, float roughness) {
     return mix(a, b, lod - lodf);
 }
 
-vec3 specularContribution(vec3 L, vec3 V, vec3 N, vec3 F0, float metallic, float roughness)
+vec3 specular_contribution(vec3 L, vec3 V, vec3 N, vec3 F0, float metallic, float roughness)
 {
 	// Precalculate vectors and dot products	
 	vec3 H = normalize (V + L);
@@ -107,22 +113,22 @@ vec3 specularContribution(vec3 L, vec3 V, vec3 N, vec3 F0, float metallic, float
 
 
 void main() {
-    vec3 N = getNormalFromMap();
-    vec3 V = normalize(pco.cam_pos.rgb - fragUVW);
+    vec3 N = get_normal_from_map();
+    vec3 V = normalize(ubo.cam_pos.rgb - frag_uvw);
     vec3 R = reflect(-V, N);
 
-    float metallic = texture(metal_roughness_sampler, in_uv).b; 
-    float roughness = texture(metal_roughness_sampler, in_uv).g;
+    float metallic = texture(metallic_roughness_sampler, in_uv).b; 
+    float roughness = texture(metallic_roughness_sampler, in_uv).g;
 
     vec3 F0 = vec3(0.04);
     F0 = mix(F0, texture(color_sampler, in_uv).rgb, metallic);
 
     vec3 light_pos = vec3(5.0, 5.0, 5.0);
-    vec3 L = normalize(light_pos - fragUVW);
-    vec3 Lo = specularContribution(L, V, N, F0, metallic, roughness);
+    vec3 L = normalize(light_pos - frag_uvw);
+    vec3 Lo = specular_contribution(L, V, N, F0, metallic, roughness);
 
     vec2 brdf = texture(brdf_sampler, vec2(max(dot(N, V), 0.0), roughness)).rg;
-    vec3 reflection = prefilteredReflection(R, roughness).rgb;
+    vec3 reflection = prefilter_reflection(R, roughness).rgb;
     vec3 irradiance = texture(irradiance_sampler, N).rgb;
 
     vec3 diffuse = irradiance * texture(color_sampler, in_uv).rgb;
@@ -137,10 +143,19 @@ void main() {
 
     vec3 color = ambient + Lo;
 
+
+    // Optional shading 
+    float ao = texture(ao_sampler, in_uv).r;
+    color = mix(color, color * ao, OCCLUSION_STRENGTH);
+
+    // Optional Emissive
+    vec3 emissive = texture(emission_sampler, in_uv).rgb;
+    color += emissive;
+
+
     color = color / (color + vec3(1.0));
 
     color = pow(color, vec3(1.0 / 2.2));
 
     out_color = vec4(color, 1.0);
-
 }

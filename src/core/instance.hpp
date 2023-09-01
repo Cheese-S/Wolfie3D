@@ -2,6 +2,7 @@
 
 #include "common/vk_common.hpp"
 #include "vulkan_object.hpp"
+#include <memory>
 
 extern const std::vector<const char *> VALIDATION_LAYERS;
 extern const std::vector<const char *> DEVICE_EXTENSIONS;

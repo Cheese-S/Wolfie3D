@@ -63,6 +63,8 @@ Device::Device(Instance &instance, PhysicalDevice &physical_device) :
 
 Device::~Device()
 {
+	p_one_time_buf_pool_.reset();
+	p_device_memory_allocator_.reset();
 	handle_.destroy();
 }
 

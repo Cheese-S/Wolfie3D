@@ -63,7 +63,7 @@ class GLTFLoader
 	std::unique_ptr<sg::SubMesh>     parse_submesh(const tinygltf::Primitive &gltf_submesh) const;
 	std::unique_ptr<sg::PBRMaterial> parse_material(
 	    const tinygltf::Material &gltf_material) const;
-	std::unique_ptr<sg::Image>   parse_image(const tinygltf::Image &gltf_image) const;
+	std::unique_ptr<sg::Image>   parse_image(const tinygltf::Image &gltf_image, uint32_t idx) const;
 	std::unique_ptr<sg::Sampler> parse_sampler(const tinygltf::Sampler &gltf_sampler) const;
 	std::unique_ptr<sg::Texture> parse_texture(const tinygltf::Texture &gltf_texture) const;
 	std::unique_ptr<sg::SubMesh> parse_submesh_as_model(

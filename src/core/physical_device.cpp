@@ -13,7 +13,6 @@ PhysicalDevice::PhysicalDevice(vk::PhysicalDevice handle, Instance &instance) :
 	if (handle_)
 	{
 		find_queue_familiy_indices();
-		find_swapchain_support_details();
 	};
 };
 
@@ -22,8 +21,7 @@ PhysicalDevice::PhysicalDevice(PhysicalDevice &&rhs) :
     instance_(rhs.instance_),
     features_(std::move(rhs.features_)),
     properties_(std::move(rhs.properties_)),
-    indices_(std::move(rhs.indices_)),
-    swapchain_support_details_(std::move(rhs.swapchain_support_details_))
+    indices_(std::move(rhs.indices_))
 {
 }
 
@@ -71,18 +69,14 @@ void PhysicalDevice::find_queue_familiy_indices()
 	indices_ = indices;
 }
 
-void PhysicalDevice::find_swapchain_support_details()
+SwapchainSupportDetails PhysicalDevice::get_swapchain_support_details() const
 {
 	vk::SurfaceKHR surface = instance_.get_surface();
-
-	swapchain_support_details_.capabilities  = handle_.getSurfaceCapabilitiesKHR(surface);
-	swapchain_support_details_.formats       = handle_.getSurfaceFormatsKHR(surface);
-	swapchain_support_details_.present_modes = handle_.getSurfacePresentModesKHR(surface);
-}
-
-const SwapchainSupportDetails &PhysicalDevice::get_swapchain_support_details() const
-{
-	return swapchain_support_details_;
+	return {
+	    .capabilities  = handle_.getSurfaceCapabilitiesKHR(surface),
+	    .formats       = handle_.getSurfaceFormatsKHR(surface),
+	    .present_modes = handle_.getSurfacePresentModesKHR(surface),
+	};
 }
 
 const QueueFamilyIndices &PhysicalDevice::get_queue_family_indices() const

@@ -2,6 +2,7 @@
 
 #include "common/glm_common.hpp"
 #include "scene_graph/component.hpp"
+#include <memory>
 
 namespace vk
 {

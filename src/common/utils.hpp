@@ -1,11 +1,14 @@
 #pragma once
+#include <cstdint>
+#include <limits>
 #include <sstream>
 #include <string>
 
 namespace vk
 {
 struct Extent3D;
-};
+enum class Format;
+};        // namespace vk
 
 namespace W3D
 {

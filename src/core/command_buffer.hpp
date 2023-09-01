@@ -32,7 +32,7 @@ class CommandBuffer : public VulkanObject<vk::CommandBuffer>
 	void copy_buffer(Buffer &src, Buffer &dst, vk::BufferCopy copy_region = {});
 
   private:
-	std::vector<vk::BufferImageCopy> full_copy_regions(const vk::ImageSubresourceRange &subresource_range, vk::Extent3D base_extent);
+	std::vector<vk::BufferImageCopy> full_copy_regions(const vk::ImageSubresourceRange &subresource_range, vk::Extent3D base_extent, uint8_t bits_per_pixel);
 
   private:
 	CommandPool           &pool_;

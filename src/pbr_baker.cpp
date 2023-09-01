@@ -2,6 +2,8 @@
 
 #include "gltf_loader.hpp"
 
+#include "common/error.hpp"
+
 #include "common/file_utils.hpp"
 #include "core/command_buffer.hpp"
 #include "core/device.hpp"
@@ -13,6 +15,15 @@
 #include "core/render_pass.hpp"
 
 #include "scene_graph/components/submesh.hpp"
+
+#include "renderdoc_app.h"
+
+W3D_DISABLE_WARNINGS()
+#include <libloaderapi.h>
+#include <minwindef.h>
+W3D_ENABLE_WARNINGS()
+
+RENDERDOC_API_1_1_2 *rdoc_api = nullptr;
 
 namespace W3D
 {
@@ -48,6 +59,13 @@ PBRBaker::PBRBaker(Device &device) :
     device_(device),
     desc_state_(device)
 {
+	if (HMODULE mod = GetModuleHandleA("renderdoc.dll"))
+	{
+		pRENDERDOC_GetAPI RENDERDOC_GetAPI =
+		    (pRENDERDOC_GetAPI) GetProcAddress(mod, "RENDERDOC_GetAPI");
+		int ret = RENDERDOC_GetAPI(eRENDERDOC_API_Version_1_1_2, (void **) &rdoc_api);
+		assert(ret == 1);
+	}
 	load_cube_model();
 	load_background();
 }
@@ -100,7 +118,11 @@ void PBRBaker::prepare_irradiance()
 	    .levels = max_mip_levels(IRRADIANCE_DIMENSION, IRRADIANCE_DIMENSION),
 	};
 	result_.p_irradiance = create_empty_cube_texture(cube_tinfo);
+	if (rdoc_api)
+		rdoc_api->StartFrameCapture(NULL, NULL);
 	bake_irradiance(cube_tinfo);
+	if (rdoc_api)
+		rdoc_api->EndFrameCapture(NULL, NULL);
 };
 
 void PBRBaker::bake_irradiance(ImageTransferInfo &cube_tinfo)
@@ -165,8 +187,8 @@ void PBRBaker::bake_irradiance(ImageTransferInfo &cube_tinfo)
 
 	for (uint32_t m = 0; m < cube_tinfo.levels; m++)
 	{
-		img_width  = std::max(1u, img_width >> m);
-		img_height = std::max(1u, img_height >> m);
+		img_width  = std::max(1u, cube_tinfo.extent.width >> m);
+		img_height = std::max(1u, cube_tinfo.extent.height >> m);
 		for (uint32_t f = 0; f < 6; f++)
 		{
 			viewport.width  = img_width;
@@ -224,7 +246,11 @@ void PBRBaker::prepare_prefilter()
 	    .levels = max_mip_levels(PREFILTER_DIMENSION, PREFILTER_DIMENSION),
 	};
 	result_.p_prefilter = create_empty_cube_texture(cube_tinfo);
+	if (rdoc_api)
+		rdoc_api->StartFrameCapture(NULL, NULL);
 	bake_prefilter(cube_tinfo);
+	if (rdoc_api)
+		rdoc_api->EndFrameCapture(NULL, NULL);
 }
 
 void PBRBaker::bake_prefilter(ImageTransferInfo &cube_tinfo)
@@ -232,7 +258,7 @@ void PBRBaker::bake_prefilter(ImageTransferInfo &cube_tinfo)
 	RenderPass           render_pass        = create_color_only_renderpass(cube_tinfo.format);
 	ImageResource        transfer_src_resrc = create_transfer_src(cube_tinfo.extent, cube_tinfo.format);
 	Framebuffer          framebuffer        = create_square_framebuffer(render_pass, transfer_src_resrc.get_view(), cube_tinfo.extent.width);
-	DescriptorAllocation desc_allocation    = allocate_texture_descriptor(*result_.p_irradiance);
+	DescriptorAllocation desc_allocation    = allocate_texture_descriptor(*result_.p_background);
 
 	struct PCO
 	{
@@ -295,8 +321,8 @@ void PBRBaker::bake_prefilter(ImageTransferInfo &cube_tinfo)
 
 	for (uint32_t m = 0; m < cube_tinfo.levels; m++)
 	{
-		img_width     = std::max(1u, img_width / (div << m));
-		img_height    = std::max(1u, img_height / (div << m));
+		img_width     = std::max(1u, cube_tinfo.extent.width >> m);
+		img_height    = std::max(1u, cube_tinfo.extent.height >> m);
 		pco.roughness = m / static_cast<float>(cube_tinfo.levels - 1);
 		for (uint32_t f = 0; f < 6; f++)
 		{
@@ -344,7 +370,11 @@ void PBRBaker::bake_prefilter(ImageTransferInfo &cube_tinfo)
 void PBRBaker::prepare_brdf_lut()
 {
 	create_brdf_lut_texture();
+	if (rdoc_api)
+		rdoc_api->StartFrameCapture(NULL, NULL);
 	bake_brdf_lut();
+	if (rdoc_api)
+		rdoc_api->EndFrameCapture(NULL, NULL);
 }
 
 void PBRBaker::create_brdf_lut_texture()
@@ -355,7 +385,8 @@ void PBRBaker::create_brdf_lut_texture()
 	    .extent    = {
 	           .width  = BRDF_LUT_DIMENSION,
 	           .height = BRDF_LUT_DIMENSION,
-	           .depth  = 1},
+	           .depth  = 1,
+        },
 	    .mipLevels   = 1,
 	    .arrayLayers = 1,
 	    .samples     = vk::SampleCountFlagBits::e1,
@@ -375,13 +406,16 @@ void PBRBaker::create_brdf_lut_texture()
 
 void PBRBaker::bake_brdf_lut()
 {
-	RenderPass                   render_pass = create_color_only_renderpass(vk::Format::eR16G16Sfloat);
+	RenderPass                   render_pass = create_color_only_renderpass(vk::Format::eR16G16Sfloat, vk::ImageLayout::eUndefined, vk::ImageLayout::eShaderReadOnlyOptimal);
 	Framebuffer                  framebuffer = create_square_framebuffer(render_pass, result_.p_brdf_lut->resource.get_view(), BRDF_LUT_DIMENSION);
 	vk::PipelineLayoutCreateInfo pl_layout_cinfo;
 
 	GraphicsPipelineState pl_state{
 	    .vert_shader_name    = "brdf_lut.vert.spv",
 	    .frag_shader_name    = "brdf_lut.frag.spv",
+	    .rasterization_state = {
+	        .cull_mode = vk::CullModeFlagBits::eNone,
+	    },
 	    .depth_stencil_state = {
 	        .depth_test_enable  = false,
 	        .depth_write_enable = false,
@@ -392,7 +426,7 @@ void PBRBaker::bake_brdf_lut()
 
 	vk::ClearValue clear_value = {
 	    .color = {
-	        std::array<float, 4>{0.0f, 0.0f, 0.0f, 0.0f},
+	        std::array<float, 4>{0.54f, 0.81f, 0.94f, 1.0f},
 	    },
 	};
 
@@ -412,10 +446,12 @@ void PBRBaker::bake_brdf_lut()
 	CommandBuffer     bake_buf        = device_.begin_one_time_buf();
 	vk::CommandBuffer bake_buf_handle = bake_buf.get_handle();
 	vk::Viewport      viewport{
-	         .x      = 0,
-	         .y      = 0,
-	         .width  = BRDF_LUT_DIMENSION,
-	         .height = BRDF_LUT_DIMENSION,
+	         .x        = 0,
+	         .y        = 0,
+	         .width    = BRDF_LUT_DIMENSION,
+	         .height   = BRDF_LUT_DIMENSION,
+	         .minDepth = 0,
+	         .maxDepth = 1,
     };
 	vk::Rect2D scissor{
 	    .offset = {
@@ -468,9 +504,9 @@ ImageResource PBRBaker::create_empty_cubic_img_resource(ImageTransferInfo &img_t
 	return resource;
 }
 
-RenderPass PBRBaker::create_color_only_renderpass(vk::Format format)
+RenderPass PBRBaker::create_color_only_renderpass(vk::Format format, vk::ImageLayout initial_layout, vk::ImageLayout final_layout)
 {
-	vk::AttachmentDescription color_attachment = RenderPass::color_attachment(format);
+	vk::AttachmentDescription color_attachment = RenderPass::color_attachment(format, initial_layout, final_layout);
 	vk::AttachmentReference   color_ref{
 	      .attachment = 0,
 	      .layout     = vk::ImageLayout::eColorAttachmentOptimal,

@@ -18,8 +18,10 @@ class Image : public DeviceMemoryObject<vk::Image>
 	Image(Image &&rhs);
 
 	vk::Extent3D get_base_extent();
+	vk::Format   get_format();
 
   private:
 	vk::Extent3D base_extent_;
+	vk::Format   format_;
 };
 }        // namespace W3D

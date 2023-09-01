@@ -2,7 +2,6 @@
 
 layout (location = 0) in vec2 in_uv;
 layout (location = 0) out vec4 out_color;
-
 layout (constant_id = 0) const uint NUM_SAMPLES = 1024u;
 
 const float PI = 3.1415926536;
@@ -31,14 +30,14 @@ vec2 hammersley2d(uint i, uint N)
 }
 
 // Based on http://blog.selfshadow.com/publications/s2013-shading-course/karis/s2013_pbs_epic_slides.pdf
-vec3 importanceSample_GGX(vec2 Xi, float roughness, vec3 normal) 
+vec3 importance_sample_GGX(vec2 Xi, float roughness, vec3 normal) 
 {
 	// Maps a 2D point to a hemisphere with spread based on roughness
 	float alpha = roughness * roughness;
 	float phi = 2.0 * PI * Xi.x + random(normal.xz) * 0.1;
-	float cosTheta = sqrt((1.0 - Xi.y) / (1.0 + (alpha*alpha - 1.0) * Xi.y));
-	float sinTheta = sqrt(1.0 - cosTheta * cosTheta);
-	vec3 H = vec3(sinTheta * cos(phi), sinTheta * sin(phi), cosTheta);
+	float cos_theta = sqrt((1.0 - Xi.y) / (1.0 + (alpha*alpha - 1.0) * Xi.y));
+	float sin_theta = sqrt(1.0 - cos_theta * cos_theta);
+	vec3 H = vec3(sin_theta * cos(phi), sin_theta * sin(phi), cos_theta);
 
 	// Tangent space
 	vec3 up = abs(normal.z) < 0.999 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0);
@@ -67,7 +66,7 @@ vec2 BRDF(float NoV, float roughness)
 	vec2 LUT = vec2(0.0);
 	for(uint i = 0u; i < NUM_SAMPLES; i++) {
 		vec2 Xi = hammersley2d(i, NUM_SAMPLES);
-		vec3 H = importanceSample_GGX(Xi, roughness, N);
+		vec3 H = importance_sample_GGX(Xi, roughness, N);
 		vec3 L = 2.0 * dot(V, H) * H - V;
 
 		float dotNL = max(dot(N, L), 0.0);

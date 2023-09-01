@@ -1,5 +1,6 @@
 #pragma once
 
+#include "common/timer.hpp"
 #include "common/vk_common.hpp"
 
 #include "command_buffer.hpp"
@@ -82,16 +83,18 @@ class Renderer
 
 	struct UBO
 	{
+		glm::mat4 proj_view;
+		glm::vec3 cam_pos;
 	};
 
-	struct PCO
+	struct SkyboxPCO
 	{
-		glm::mat4 projview;
+		glm::mat4 proj;
+		glm::mat4 view;
 	};
 
 	struct PBRPCO
 	{
-		glm::mat4 projview;
 		glm::mat4 model;
 	};
 
@@ -104,12 +107,14 @@ class Renderer
 	void     sync_present(uint32_t img_idx);
 	void     record_draw_commands(uint32_t img_idx);
 
+	void update_frame_ubo();
 	void set_dynamic_states(CommandBuffer &cmd_buf);
 	void begin_render_pass(CommandBuffer &cmd_buf, vk::Framebuffer framebuffer);
 	void draw_scene(CommandBuffer &cmd_buf);
 	void draw_skybox(CommandBuffer &cmd_buf);
 	void draw_submesh(CommandBuffer &cmd_buf, sg::SubMesh &submesh);
 	void bind_material(CommandBuffer &cmd_buf, const sg::PBRMaterial &material);
+	void push_node_model_matrix(CommandBuffer &cmd_buf, sg::Node *p_node);
 
 	void           resize();
 	FrameResource &get_current_frame_resource();
@@ -137,6 +142,7 @@ class Renderer
 	std::unique_ptr<sg::Scene>            p_scene_;
 	sg::Node                             *p_camera_node_ = nullptr;
 
+	Timer                      timer_;
 	uint32_t                   frame_idx_ = 0;
 	std::vector<FrameResource> frame_resources_;
 	PipelineResource           skybox_;

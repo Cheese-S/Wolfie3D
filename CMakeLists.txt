@@ -6,6 +6,7 @@ if (MINGW)
     include(${CMAKE_CURRENT_SOURCE_DIR}/windows.env.cmake)
     set(CMAKE_C_COMPILER ${MINGW_PATH}/bin/clang.exe)
     set(CMAKE_CXX_COMPILER ${MINGW_PATH}/bin/clang++.exe)
+    add_link_options("-fuse-ld=lld")
 endif()
 
 execute_process(COMMAND uname OUTPUT_VARIABLE uname)

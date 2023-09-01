@@ -18,8 +18,9 @@ CommandBuffer::CommandBuffer(vk::CommandBuffer handle, CommandPool &pool, vk::Co
 
 CommandBuffer::~CommandBuffer()
 {
-	if (handle_)
+	if (handle_ && pool_.get_handle())
 	{
+		reset();
 		pool_.recycle_command_buffer(*this);
 	}
 }
@@ -57,7 +58,7 @@ void CommandBuffer::reset()
 void CommandBuffer::update_image(ImageResource &resource, Buffer &staging_buf)
 {
 	auto                            &subresource_range = resource.get_view().get_subresource_range();
-	std::vector<vk::BufferImageCopy> copy_regions      = full_copy_regions(resource.get_view().get_subresource_range(), resource.get_image().get_base_extent());
+	std::vector<vk::BufferImageCopy> copy_regions      = full_copy_regions(resource.get_view().get_subresource_range(), resource.get_image().get_base_extent(), ImageResource::format_to_bits_per_pixel(resource.get_image().get_format()));
 	handle_.copyBufferToImage(staging_buf.get_handle(), resource.get_image().get_handle(), vk::ImageLayout::eTransferDstOptimal, copy_regions);
 }
 
@@ -153,7 +154,7 @@ void CommandBuffer::set_image_layout(ImageResource &resource, vk::ImageLayout ol
 	                        barrier);
 }
 
-std::vector<vk::BufferImageCopy> CommandBuffer::full_copy_regions(const vk::ImageSubresourceRange &subresource_range, vk::Extent3D base_extent)
+std::vector<vk::BufferImageCopy> CommandBuffer::full_copy_regions(const vk::ImageSubresourceRange &subresource_range, vk::Extent3D base_extent, uint8_t bits_per_pixel)
 {
 	std::vector<vk::BufferImageCopy> buffer_copy_regions;
 
@@ -177,7 +178,7 @@ std::vector<vk::BufferImageCopy> CommandBuffer::full_copy_regions(const vk::Imag
 			    },
 			});
 
-			offset += buffer_copy_regions.back().imageExtent.width * buffer_copy_regions.back().imageExtent.height * 16;
+			offset += buffer_copy_regions.back().imageExtent.width * buffer_copy_regions.back().imageExtent.height * bits_per_pixel;
 		}
 	}
 

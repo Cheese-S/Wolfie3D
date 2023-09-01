@@ -184,14 +184,12 @@ std::unique_ptr<sg::Sampler> GLTFLoader::create_default_sampler() const
 
 void GLTFLoader::load_images() const
 {
-	std::vector<std::unique_ptr<sg::Image>>
-	    p_images(gltf_model_.images.size());
+	std::vector<std::unique_ptr<sg::Image>> p_images;
+	p_images.reserve(gltf_model_.images.size());
 
 	for (size_t i = 0; i < gltf_model_.images.size(); i++)
 	{
-		std::unique_ptr<sg::Image> p_image = parse_image(gltf_model_.images[i]);
-		auto                       image   = parse_image(gltf_model_.images[i]);
-		p_images[i]                        = std::move(image);
+		p_images.emplace_back(parse_image(gltf_model_.images[i], i));
 	}
 
 	batch_upload_images(p_images);
@@ -217,6 +215,8 @@ void GLTFLoader::batch_upload_images(std::vector<std::unique_ptr<sg::Image>> &p_
 			batch_size += img_size;
 			staging_bufs.emplace_back(device_.get_device_memory_allocator().allocate_staging_buffer(img_size));
 
+			staging_bufs.back().update(p_image->get_image_transferinfo().binary);
+
 			cmd_buf.set_image_layout(p_image->get_resource(), vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal, vk::PipelineStageFlagBits::eHost, vk::PipelineStageFlagBits::eTransfer);
 
 			cmd_buf.update_image(p_image->get_resource(), staging_bufs.back());
@@ -229,12 +229,14 @@ void GLTFLoader::batch_upload_images(std::vector<std::unique_ptr<sg::Image>> &p_
 	}
 };
 
-std::unique_ptr<sg::Image> GLTFLoader::parse_image(const tinygltf::Image &gltf_image) const
+std::unique_ptr<sg::Image> GLTFLoader::parse_image(const tinygltf::Image &gltf_image, uint32_t idx) const
 {
 	std::unique_ptr<sg::Image> p_image = nullptr;
 
 	if (!gltf_image.image.empty())
 	{
+		// TODO: avoid copying images in tinfo
+		// TODO: use srgb for both emissive and albedo
 		ImageTransferInfo img_tinfo{
 		    .binary = gltf_image.image,
 		    .extent = {
@@ -242,7 +244,7 @@ std::unique_ptr<sg::Image> GLTFLoader::parse_image(const tinygltf::Image &gltf_i
 		        .height = to_u32(gltf_image.height),
 		        .depth  = 1,
 		    },
-		    .format = vk::Format::eR8G8B8A8Srgb,
+		    .format = (idx == 0 || idx == 2) ? vk::Format::eR8G8B8A8Srgb : vk::Format::eR8G8B8A8Unorm,
 		    .levels = 1,
 		};
 
@@ -443,7 +445,7 @@ void GLTFLoader::append_textures_to_material(tinygltf::ParameterMap &parameter_m
 	{
 		if (value.first.find("Texture") != std::string::npos)
 		{
-			std::string texture_name = to_string(value.first);
+			std::string texture_name = to_snake_case(to_string(value.first));
 			assert(value.second.TextureIndex() < p_textures.size());
 			p_material->texture_map_[texture_name] = p_textures[value.second.TextureIndex()];
 		}
@@ -655,11 +657,6 @@ void GLTFLoader::init_node_hierarchy(tinygltf::Scene *p_gltf_scene, std::vector<
 
 	std::queue<NodeTraversal> q;
 
-	q.push({
-	    .parent   = root,
-	    .curr_idx = 0,
-	});
-
 	for (int i : p_gltf_scene->nodes)
 	{
 		q.push({
@@ -677,11 +674,11 @@ void GLTFLoader::init_node_hierarchy(tinygltf::Scene *p_gltf_scene, std::vector<
 		traversal.parent.add_child(curr);
 		curr.set_parent(traversal.parent);
 
-		for (int i : gltf_model_.nodes[traversal.curr_idx].children)
+		for (int child_idx : gltf_model_.nodes[traversal.curr_idx].children)
 		{
 			q.push({
 			    .parent   = std::ref(curr),
-			    .curr_idx = i,
+			    .curr_idx = child_idx,
 			});
 		}
 	}

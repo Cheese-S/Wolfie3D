@@ -5,6 +5,7 @@
 #include "gltf_loader.hpp"
 
 #include "common/cvar.hpp"
+#include "common/error.hpp"
 #include "common/file_utils.hpp"
 #include "common/logging.hpp"
 #include "common/utils.hpp"
@@ -38,7 +39,8 @@ const uint32_t Renderer::IRRADIANCE_DIMENSION = 2;
 
 Renderer::Renderer()
 {
-	p_window_           = std::make_unique<Window>("Wolfie3D");
+	p_window_ = std::make_unique<Window>("Wolfie3D");
+	p_window_->register_callbacks(*this);
 	p_instance_         = std::make_unique<Instance>("Wolfie3D", *p_window_);
 	p_physical_device_  = p_instance_->pick_physical_device();
 	p_device_           = std::make_unique<Device>(*p_instance_, *p_physical_device_);
@@ -56,16 +58,31 @@ Renderer::~Renderer(){};
 void Renderer::start()
 {
 	main_loop();
+	timer_.start();
 }
 
 void Renderer::main_loop()
 {
 	while (!p_window_->should_close())
 	{
+		timer_.tick();
 		render_frame();
+		update();
 		p_window_->poll_events();
 	}
 	p_device_->get_handle().waitIdle();
+}
+
+void Renderer::update()
+{
+	double delta_time = timer_.tick();
+
+	std::vector<sg::Script *> p_scripts = p_scene_->get_components<sg::Script>();
+
+	for (sg::Script *p_script : p_scripts)
+	{
+		p_script->update(delta_time);
+	}
 }
 
 void Renderer::render_frame()
@@ -81,22 +98,39 @@ uint32_t Renderer::sync_acquire_next_image()
 {
 	FrameResource &frame    = get_current_frame_resource();
 	vk::Device     device_h = p_device_->get_handle();
-	while (vk::Result::eTimeout ==
-	       device_h.waitForFences({frame.in_flight_fence.get_handle()}, true, UINT64_MAX))
-	{
-		;
-	}
+	uint32_t       img_idx;
 
-	vk::ResultValue<uint32_t> acquired_res = device_h.acquireNextImageKHR(p_swapchain_->get_handle(), UINT64_MAX, frame.image_avaliable_semaphore.get_handle(), VK_NULL_HANDLE);
-
-	if (acquired_res.result == vk::Result::eErrorOutOfDateKHR)
+	while (true)
 	{
-		resize();
+		while (vk::Result::eTimeout ==
+		       device_h.waitForFences({frame.in_flight_fence.get_handle()}, true, UINT64_MAX))
+		{
+			;
+		}
+
+		// Opted for plain vkAacquireNextImageKHR here because we want to deal with the error ourselves.
+		// Otherwise, vulkan.hpp would've thrown the error and we have to catch it (slow).
+		// See, https://github.com/KhronosGroup/Vulkan-Hpp/issues/599
+		vk::Result acquired_res = static_cast<vk::Result>(vkAcquireNextImageKHR(device_h, p_swapchain_->get_handle(), UINT64_MAX, frame.image_avaliable_semaphore.get_handle(), VK_NULL_HANDLE, &img_idx));
+
+		if (acquired_res == vk::Result::eErrorOutOfDateKHR)
+		{
+			resize();
+		}
+		else if (acquired_res != vk::Result::eSuccess && acquired_res != vk::Result::eSuboptimalKHR)
+		{
+			LOGE("failed to acquire swapchain image!");
+			abort();
+		}
+		else
+		{
+			break;
+		}
 	}
 
 	device_h.resetFences(frame.in_flight_fence.get_handle());
 
-	return acquired_res.value;
+	return img_idx;
 };
 
 void Renderer::sync_submit_commands()
@@ -125,7 +159,12 @@ void Renderer::sync_present(uint32_t img_idx)
 	    .pSwapchains        = &p_swapchain_->get_handle(),
 	    .pImageIndices      = &img_idx,
 	};
-	vk::Result present_res = p_device_->get_present_queue().presentKHR(present_info);
+
+	// Same reasoing as sync_acquire.
+	// See, https://github.com/KhronosGroup/Vulkan-Hpp/issues/599
+	vk::Result present_res = static_cast<vk::Result>(
+	    vkQueuePresentKHR(p_device_->get_present_queue(), reinterpret_cast<VkPresentInfoKHR *>(&present_info)));
+
 	if (present_res == vk::Result::eErrorOutOfDateKHR || present_res == vk::Result::eSuboptimalKHR || is_window_resized_)
 	{
 		is_window_resized_ = false;
@@ -140,6 +179,8 @@ void Renderer::sync_present(uint32_t img_idx)
 
 void Renderer::resize()
 {
+	vk::Extent2D extent = p_window_->wait_for_non_zero_extent();
+	p_device_->get_handle().waitIdle();
 	p_swapchain_->rebuild(p_window_->get_extent());
 	p_sframe_buffer_->rebuild();
 }
@@ -148,12 +189,27 @@ void Renderer::record_draw_commands(uint32_t img_idx)
 {
 	CommandBuffer &cmd_buf = get_current_frame_resource().cmd_buf;
 	cmd_buf.reset();
+	cmd_buf.begin();
+	update_frame_ubo();
 	set_dynamic_states(cmd_buf);
 	begin_render_pass(cmd_buf, p_sframe_buffer_->get_handle(img_idx));
 	draw_skybox(cmd_buf);
 	draw_scene(cmd_buf);
 	cmd_buf.get_handle().endRenderPass();
 	cmd_buf.get_handle().end();
+}
+
+void Renderer::update_frame_ubo()
+{
+	sg::Camera &camera      = p_camera_node_->get_component<sg::Camera>();
+	Buffer     &uniform_buf = get_current_frame_resource().uniform_buf;
+
+	UBO ubo{
+	    .proj_view = camera.get_projection() * camera.get_view(),
+	    .cam_pos   = p_camera_node_->get_component<sg::Transform>().get_translation(),
+	};
+
+	uniform_buf.update(&ubo, sizeof(ubo));
 }
 
 void Renderer::set_dynamic_states(CommandBuffer &cmd_buf)
@@ -181,6 +237,11 @@ void Renderer::set_dynamic_states(CommandBuffer &cmd_buf)
 
 void Renderer::begin_render_pass(CommandBuffer &cmd_buf, vk::Framebuffer framebuffer)
 {
+	std::array<vk::ClearValue, 2> clear_values{
+	    std::array<float, 4>{0.0f, 0.0f, 0.0f, 0.0f},
+	};
+	clear_values[1].depthStencil = vk::ClearDepthStencilValue{1.0f, 0};
+
 	vk::RenderPassBeginInfo render_pass_binfo{
 	    .renderPass  = p_render_pass_->get_handle(),
 	    .framebuffer = framebuffer,
@@ -191,19 +252,10 @@ void Renderer::begin_render_pass(CommandBuffer &cmd_buf, vk::Framebuffer framebu
             },
 	         .extent = p_swapchain_->get_swapchain_properties().extent,
         },
-	};
-	std::array<vk::ClearValue, 1> clear_values = {
-	    std::array<float, 4>{0.0f, 0.0f, 0.0f, 0.0f},
-	};
-	vk::RenderPassBeginInfo pass_begin_info{
-	    .renderPass  = p_render_pass_->get_handle(),
-	    .framebuffer = framebuffer,
-	    .renderArea  = {
-	         .extent = p_swapchain_->get_swapchain_properties().extent,
-        },
 	    .clearValueCount = clear_values.size(),
 	    .pClearValues    = clear_values.data(),
 	};
+
 	cmd_buf.get_handle().beginRenderPass(render_pass_binfo, vk::SubpassContents::eInline);
 }
 
@@ -211,30 +263,39 @@ void Renderer::draw_skybox(CommandBuffer &cmd_buf)
 {
 	sg::Camera    &camera = p_camera_node_->get_component<sg::Camera>();
 	FrameResource &frame  = get_current_frame_resource();
-	PCO            pco    = {
-	                  .projview = camera.get_projection() * camera.get_view(),
+	SkyboxPCO      pco{
+	         .proj = camera.get_projection(),
+	         .view = camera.get_view(),
     };
-	cmd_buf.get_handle().bindPipeline(vk::PipelineBindPoint::eGraphics, skybox_.p_pl->get_handle());
-	cmd_buf.get_handle().bindDescriptorSets(vk::PipelineBindPoint::eGraphics, skybox_.p_pl->get_pipeline_layout(), 0, frame.skybox_set, {});
-	cmd_buf.get_handle().pushConstants<PCO>(skybox_.p_pl->get_pipeline_layout(), vk::ShaderStageFlagBits::eVertex, 0, pco);
+	cmd_buf.get_handle().bindPipeline(
+	    vk::PipelineBindPoint::eGraphics,
+	    skybox_.p_pl->get_handle());
+	cmd_buf.get_handle().bindDescriptorSets(
+	    vk::PipelineBindPoint::eGraphics,
+	    skybox_.p_pl->get_pipeline_layout(),
+	    0,
+	    frame.skybox_set,
+	    {});
+	cmd_buf.get_handle().pushConstants<SkyboxPCO>(
+	    skybox_.p_pl->get_pipeline_layout(),
+	    vk::ShaderStageFlagBits::eVertex,
+	    0,
+	    pco);
 	draw_submesh(cmd_buf, *baked_pbr_.p_box);
 }        // namespace W3D
 
 void Renderer::draw_scene(CommandBuffer &cmd_buf)
 {
-	struct PBRPCO
-	{
-		glm::mat4 projview;
-		glm::mat4 model;
-	};
 	vk::PipelineLayout pl_layout = pbr_.p_pl->get_pipeline_layout();
-	cmd_buf.get_handle().bindPipeline(vk::PipelineBindPoint::eGraphics, pbr_.p_pl->get_handle());
-	sg::Camera &camera = p_camera_node_->get_component<sg::Camera>();
-
-	// TODO: cam_pos and projview doesn't change per mesh
-	// TODO: use UBO for them.
-	glm::vec3 cam_pos = p_camera_node_->get_component<sg::Transform>().get_translation();
-	cmd_buf.get_handle().pushConstants<glm::vec3>(pl_layout, vk::ShaderStageFlagBits::eFragment, 0, cam_pos);
+	cmd_buf.get_handle().bindPipeline(
+	    vk::PipelineBindPoint::eGraphics,
+	    pbr_.p_pl->get_handle());
+	cmd_buf.get_handle().bindDescriptorSets(
+	    vk::PipelineBindPoint::eGraphics,
+	    pbr_.p_pl->get_pipeline_layout(),
+	    0,
+	    get_current_frame_resource().pbr_set,
+	    {});
 
 	std::queue<sg::Node *> p_nodes;
 	p_nodes.push(&p_scene_->get_root_node());
@@ -242,15 +303,11 @@ void Renderer::draw_scene(CommandBuffer &cmd_buf)
 	{
 		sg::Node *p_node = p_nodes.front();
 		p_nodes.pop();
+
 		if (p_node->has_component<sg::Mesh>())
 		{
-			PBRPCO pco = {
-			    .projview = camera.get_projection() * camera.get_view(),
-			    .model    = p_node->get_component<sg::Transform>().get_world_M(),
-			};
-			cmd_buf.get_handle().pushConstants<PBRPCO>(pl_layout, vk::ShaderStageFlagBits::eVertex, 0, pco);
+			push_node_model_matrix(cmd_buf, p_node);
 			std::vector<sg::SubMesh *> p_submeshs = p_node->get_component<sg::Mesh>().get_p_submeshs();
-
 			for (sg::SubMesh *p_submesh : p_submeshs)
 			{
 				const sg::PBRMaterial *p_pbr_material = dynamic_cast<const sg::PBRMaterial *>(p_submesh->get_material());
@@ -266,6 +323,18 @@ void Renderer::draw_scene(CommandBuffer &cmd_buf)
 		}
 	}
 }
+
+void Renderer::push_node_model_matrix(CommandBuffer &cmd_buf, sg::Node *p_node)
+{
+	// TODO: learn rotation
+	glm::mat4 rotated_m = p_node->get_component<sg::Transform>().get_world_M();
+	rotated_m           = glm::rotate(rotated_m, 1.57f, glm::vec3(1.0f, 0.0f, 0.0f));
+	rotated_m           = glm::rotate(rotated_m, -1.57f, glm::vec3(0.0f, 1.0f, 0.0f));
+	PBRPCO pco          = {
+	             .model = rotated_m,
+    };
+	cmd_buf.get_handle().pushConstants<PBRPCO>(pbr_.p_pl->get_pipeline_layout(), vk::ShaderStageFlagBits::eVertex, 0, pco);
+}        // namespace W3D
 
 void Renderer::bind_material(CommandBuffer &cmd_buf, const sg::PBRMaterial &material)
 {
@@ -380,10 +449,10 @@ void Renderer::create_pbr_desc_resources()
 
 		DescriptorAllocation allocation =
 		    DescriptorBuilder::begin(p_descriptor_state_->cache, p_descriptor_state_->allocator)
-		        .bind_buffer(0, ubo, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eVertex)
+		        .bind_buffer(0, ubo, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment)
 		        .bind_image(1, irradiance, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eFragment)
 		        .bind_image(2, prefilter, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eFragment)
-		        .bind_image(3, irradiance, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eFragment)
+		        .bind_image(3, brdf_lut, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eFragment)
 		        .build();
 
 		frame_resources_[i].pbr_set                            = allocation.set;
@@ -417,7 +486,7 @@ void Renderer::create_materials_desc_resources()
 	    "base_color_texture",
 	    "normal_texture",
 	    "occlusion_texture",
-	    "emission_texture",
+	    "emissive_texture",
 	    "metallic_roughness_texture",
 	};
 	sg::Texture *p_default_texture = p_scene_->find_component<sg::Texture>("default_texture");
@@ -521,35 +590,38 @@ void Renderer::create_pipeline_resources()
 	    },
 	};
 
-	std::array<vk::PushConstantRange, 2> main_push_const_ranges;
-	main_push_const_ranges[0] = {
+	std::array<vk::PushConstantRange, 1> pbr_push_const_ranges;
+	pbr_push_const_ranges[0] = {
 	    .stageFlags = vk::ShaderStageFlagBits::eVertex,
 	    .offset     = 0,
-	    .size       = 2 * sizeof(glm::mat4),
+	    .size       = sizeof(PBRPCO),
 	};
-	main_push_const_ranges[1] = {
-	    .stageFlags = vk::ShaderStageFlagBits::eFragment,
-	    .offset     = 0,
-	    .size       = sizeof(glm::vec3),
-	};
-	vk::PipelineLayoutCreateInfo main_pl_layout_cinfo{
+	vk::PipelineLayoutCreateInfo pbr_pl_layout_cinfo{
 	    .setLayoutCount         = 2,
 	    .pSetLayouts            = pbr_.desc_layout_ring.data(),
-	    .pushConstantRangeCount = to_u32(main_push_const_ranges.size()),
-	    .pPushConstantRanges    = main_push_const_ranges.data(),
+	    .pushConstantRangeCount = to_u32(pbr_push_const_ranges.size()),
+	    .pPushConstantRanges    = pbr_push_const_ranges.data(),
 	};
 
-	pbr_.p_pl = std::make_unique<GraphicsPipeline>(*p_device_, *p_render_pass_, pl_state, main_pl_layout_cinfo);
+	pbr_.p_pl = std::make_unique<GraphicsPipeline>(*p_device_, *p_render_pass_, pl_state, pbr_pl_layout_cinfo);
 
+	vk::PushConstantRange skybox_push_const_range{
+	    .stageFlags = vk::ShaderStageFlagBits::eVertex,
+	    .offset     = 0,
+	    .size       = sizeof(SkyboxPCO),
+	};
 	vk::PipelineLayoutCreateInfo skybox_pl_layout_cinfo{
-	    .setLayoutCount = 1,
-	    .pSetLayouts    = skybox_.desc_layout_ring.data(),
+	    .setLayoutCount         = 1,
+	    .pSetLayouts            = skybox_.desc_layout_ring.data(),
+	    .pushConstantRangeCount = 1,
+	    .pPushConstantRanges    = &skybox_push_const_range,
 	};
-	pl_state.vert_shader_name = "skybox.vert.spv";
-	pl_state.frag_shader_name = "skybox.frag.spv";
-	skybox_.p_pl              = std::make_unique<GraphicsPipeline>(*p_device_, *p_render_pass_, pl_state, skybox_pl_layout_cinfo);
+	pl_state.vert_shader_name                       = "skybox.vert.spv";
+	pl_state.frag_shader_name                       = "skybox.frag.spv";
+	pl_state.rasterization_state.cull_mode          = vk::CullModeFlagBits::eFront;
+	pl_state.depth_stencil_state.depth_test_enable  = false;
+	pl_state.depth_stencil_state.depth_write_enable = false;
+	skybox_.p_pl                                    = std::make_unique<GraphicsPipeline>(*p_device_, *p_render_pass_, pl_state, skybox_pl_layout_cinfo);
 }
-
-// TODO: COMMENT BELOW
 
 }        // namespace W3D

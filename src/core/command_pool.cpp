@@ -25,11 +25,12 @@ CommandPool::~CommandPool()
 {
 	if (handle_)
 	{
+		// Some driver implementations fails to recollect memory from the buffers before freeing the buffers.
+		// Therefore, we must call reset before destroying the pool.
 		reset();
 		device_.get_handle().destroyCommandPool(handle_);
+		handle_ = nullptr;
 	}
-	// Some driver implementations fails to recollect memory from the buffers before freeing the buffers.
-	// Therefore, we must call reset before destroying the pool.
 }
 
 CommandBuffer CommandPool::allocate_command_buffer(vk::CommandBufferLevel level)
@@ -71,7 +72,6 @@ std::vector<CommandBuffer> CommandPool::allocate_command_buffers(uint32_t count,
 
 void CommandPool::recycle_command_buffer(CommandBuffer &cmd_buf)
 {
-	cmd_buf.reset();
 	if (cmd_buf.level_ == vk::CommandBufferLevel::ePrimary)
 	{
 		primary_cmd_bufs_.push_back(std::move(cmd_buf));

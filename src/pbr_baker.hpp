@@ -72,7 +72,7 @@ class PBRBaker
 	void draw_box(CommandBuffer &cmd_buf);
 	void transfer_from_src_to_texture(CommandBuffer &cmd_buf, ImageResource &src, Texture &texture, vk::ImageCopy copy_region);
 
-	RenderPass               create_color_only_renderpass(vk::Format format);
+	RenderPass               create_color_only_renderpass(vk::Format format, vk::ImageLayout initial_layout = vk::ImageLayout::eUndefined, vk::ImageLayout final_layout = vk::ImageLayout::eColorAttachmentOptimal);
 	ImageResource            create_transfer_src(vk::Extent3D extent, vk::Format format);
 	Framebuffer              create_square_framebuffer(const RenderPass &render_pass, const ImageView &view, uint32_t dimension);
 	GraphicsPipeline         create_graphics_pipeline(RenderPass &render_pass, vk::PipelineLayoutCreateInfo &ppl_layout_cinfo, const char *vert_shader_name, const char *frag_shader_name);

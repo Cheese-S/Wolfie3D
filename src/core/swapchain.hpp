@@ -2,6 +2,7 @@
 
 #include "common/vk_common.hpp"
 #include "vulkan_object.hpp"
+#include <memory>
 
 namespace W3D
 {

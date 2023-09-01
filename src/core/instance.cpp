@@ -50,7 +50,7 @@ Instance::~Instance()
 	{
 		handle_.destroyDebugUtilsMessengerEXT(debug_messenger_);
 	}
-	handle_.destroySurfaceKHR();
+	handle_.destroySurfaceKHR(surface_);
 	handle_.destroy();
 }
 
