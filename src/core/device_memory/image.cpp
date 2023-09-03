@@ -6,6 +6,12 @@
 namespace W3D
 {
 
+Image::Image(Key<DeviceMemoryAllocator> key, VmaAllocator allocator, std::nullptr_t nptr) :
+    DeviceMemoryObject(allocator, key)
+{
+	handle_ = nullptr;
+}
+
 Image::Image(Key<DeviceMemoryAllocator> key, VmaAllocator allocator, vk::ImageCreateInfo &image_cinfo, VmaAllocationCreateInfo &allocation_cinfo) :
     DeviceMemoryObject(allocator, key),
     base_extent_(image_cinfo.extent),
@@ -30,6 +36,23 @@ Image::Image(Image &&rhs) :
     base_extent_(rhs.base_extent_),
     format_(rhs.format_)
 {
+}
+
+Image &Image::operator=(Image &&rhs)
+{
+	if (handle_)
+	{
+		vmaDestroyImage(details_.allocator, handle_, details_.allocation);
+	}
+
+	handle_      = rhs.handle_;
+	base_extent_ = rhs.base_extent_;
+	format_      = rhs.format_;
+	details_     = rhs.details_;
+
+	rhs.handle_             = nullptr;
+	rhs.details_.allocation = nullptr;
+	return *this;
 }
 
 vk::Extent3D Image::get_base_extent()

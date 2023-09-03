@@ -326,7 +326,6 @@ void Renderer::draw_scene(CommandBuffer &cmd_buf)
 
 void Renderer::push_node_model_matrix(CommandBuffer &cmd_buf, sg::Node *p_node)
 {
-	// TODO: learn rotation
 	glm::mat4 rotated_m = p_node->get_component<sg::Transform>().get_world_M();
 	rotated_m           = glm::rotate(rotated_m, 1.57f, glm::vec3(1.0f, 0.0f, 0.0f));
 	rotated_m           = glm::rotate(rotated_m, -1.57f, glm::vec3(0.0f, 1.0f, 0.0f));

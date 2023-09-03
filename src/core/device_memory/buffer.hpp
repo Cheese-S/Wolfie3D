@@ -12,6 +12,7 @@ class Key;
 class Buffer : public DeviceMemoryObject<vk::Buffer>
 {
   public:
+	Buffer(Key<DeviceMemoryAllocator> key, VmaAllocator allocator, std::nullptr_t nptr);
 	Buffer(Key<DeviceMemoryAllocator> key, VmaAllocator allocator, vk::BufferCreateInfo &buffer_cinfo, VmaAllocationCreateInfo &allocation_cinfo);
 	Buffer(Buffer &&);
 	Buffer(Buffer const &)            = delete;

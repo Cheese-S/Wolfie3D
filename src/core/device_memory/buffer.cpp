@@ -5,6 +5,12 @@
 namespace W3D
 {
 
+Buffer::Buffer(Key<DeviceMemoryAllocator> key, VmaAllocator allocator, std::nullptr_t nptr) :
+    DeviceMemoryObject(allocator, key)
+{
+	handle_ = nullptr;
+}
+
 Buffer::Buffer(Key<DeviceMemoryAllocator> key, VmaAllocator allocator, vk::BufferCreateInfo &buffer_cinfo, VmaAllocationCreateInfo &allocation_cinfo) :
     DeviceMemoryObject(allocator, key)
 {

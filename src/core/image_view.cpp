@@ -39,6 +39,11 @@ vk::ImageViewCreateInfo ImageView::cube_view_cinfo(vk::Image image, vk::Format f
 	return view_cinfo;
 }
 
+ImageView::ImageView(const Device &device, std::nullptr_t nptr) :
+    device_(device)
+{
+}
+
 ImageView::ImageView(const Device &device, vk::ImageViewCreateInfo &image_view_cinfo) :
     device_(device),
     subresource_range_(image_view_cinfo.subresourceRange)
@@ -52,6 +57,18 @@ ImageView::ImageView(ImageView &&rhs) :
     subresource_range_(rhs.subresource_range_)
 {}
 
+ImageView &ImageView::operator=(ImageView &&rhs)
+{
+	if (handle_)
+	{
+		device_.get_handle().destroyImageView(handle_);
+	}
+	subresource_range_ = rhs.subresource_range_;
+	handle_            = rhs.handle_;
+	rhs.handle_        = nullptr;
+	return *this;
+}
+
 ImageView::~ImageView()
 {
 	if (handle_)
@@ -60,7 +77,7 @@ ImageView::~ImageView()
 	}
 }
 
-const vk::ImageSubresourceRange &ImageView::get_subresource_range()
+const vk::ImageSubresourceRange &ImageView::get_subresource_range() const
 {
 	return subresource_range_;
 }

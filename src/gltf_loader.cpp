@@ -122,6 +122,7 @@ sg::Scene GLTFLoader::parse_scene(int scene_idx)
 	load_images();
 	load_textures();
 	load_materials();
+	batch_upload_images();
 	load_meshs();
 	load_nodes(scene_idx);
 	load_default_camera();
@@ -182,25 +183,55 @@ std::unique_ptr<sg::Sampler> GLTFLoader::create_default_sampler() const
 	return parse_sampler(gltf_sampler);
 }
 
-void GLTFLoader::load_images() const
+void GLTFLoader::load_images()
 {
 	std::vector<std::unique_ptr<sg::Image>> p_images;
 	p_images.reserve(gltf_model_.images.size());
+	img_tinfos_.reserve(gltf_model_.images.size());
 
 	for (size_t i = 0; i < gltf_model_.images.size(); i++)
 	{
-		p_images.emplace_back(parse_image(gltf_model_.images[i], i));
+		p_images.emplace_back(parse_image(gltf_model_.images[i]));
 	}
-
-	batch_upload_images(p_images);
 
 	p_scene_->set_components(std::move(p_images));
 }
 
-void GLTFLoader::batch_upload_images(std::vector<std::unique_ptr<sg::Image>> &p_images) const
+std::unique_ptr<sg::Image> GLTFLoader::parse_image(const tinygltf::Image &gltf_image)
 {
-	size_t i     = 0;
-	size_t count = p_images.size();
+	if (!gltf_image.image.empty())
+	{
+		img_tinfos_.push_back({
+		    .binary = std::move(gltf_image.image),
+		    .meta   = {
+		          .extent = {
+		              .width  = to_u32(gltf_image.width),
+		              .height = to_u32(gltf_image.height),
+		              .depth  = 1,
+                },
+		          .format = vk::Format::eR8G8B8A8Unorm,
+		          .levels = 1,
+            },
+		});
+	}
+	else
+	{
+		std::string path = model_path_ + "/" + gltf_image.uri;
+		img_tinfos_.push_back(ImageResource::load_two_dim_image(path));
+	}
+
+	return std::make_unique<sg::Image>(
+	    ImageResource(device_, nullptr),
+	    gltf_image.name);
+}
+
+void GLTFLoader::batch_upload_images() const
+{
+	std::vector<sg::Image *> p_images = p_scene_->get_components<sg::Image>();
+
+	size_t i = 0;
+	// we ignore the last image b/c it's the default image we've created for default texture.
+	size_t count = p_images.size() - 1;
 
 	while (i < count)
 	{
@@ -210,12 +241,16 @@ void GLTFLoader::batch_upload_images(std::vector<std::unique_ptr<sg::Image>> &p_
 
 		while (i < count && batch_size < 64 * 1024 * 1024)
 		{
-			std::unique_ptr<sg::Image> &p_image  = p_images[i];
-			size_t                      img_size = p_image->get_image_transferinfo().binary.size();
+			sg::Image               *p_image   = p_images[i];
+			const ImageTransferInfo &img_tinfo = img_tinfos_[i];
+			size_t                   img_size  = img_tinfo.binary.size();
+
+			create_image_resource(*p_image, i);
+
 			batch_size += img_size;
 			staging_bufs.emplace_back(device_.get_device_memory_allocator().allocate_staging_buffer(img_size));
 
-			staging_bufs.back().update(p_image->get_image_transferinfo().binary);
+			staging_bufs.back().update(img_tinfo.binary);
 
 			cmd_buf.set_image_layout(p_image->get_resource(), vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal, vk::PipelineStageFlagBits::eHost, vk::PipelineStageFlagBits::eTransfer);
 
@@ -229,51 +264,26 @@ void GLTFLoader::batch_upload_images(std::vector<std::unique_ptr<sg::Image>> &p_
 	}
 };
 
-std::unique_ptr<sg::Image> GLTFLoader::parse_image(const tinygltf::Image &gltf_image, uint32_t idx) const
+void GLTFLoader::create_image_resource(sg::Image &image, size_t idx) const
 {
-	std::unique_ptr<sg::Image> p_image = nullptr;
+	const ImageTransferInfo &img_tinfo = img_tinfos_[idx];
+	vk::ImageCreateInfo      img_cinfo{
+	         .imageType   = vk::ImageType::e2D,
+	         .format      = img_tinfo.meta.format,
+	         .extent      = img_tinfo.meta.extent,
+	         .mipLevels   = img_tinfo.meta.levels,
+	         .arrayLayers = 1,
+	         .samples     = vk::SampleCountFlagBits::e1,
+	         .tiling      = vk::ImageTiling::eOptimal,
+	         .usage       = vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst,
+	         .sharingMode = vk::SharingMode::eExclusive,
+    };
 
-	if (!gltf_image.image.empty())
-	{
-		// TODO: avoid copying images in tinfo
-		// TODO: use srgb for both emissive and albedo
-		ImageTransferInfo img_tinfo{
-		    .binary = gltf_image.image,
-		    .extent = {
-		        .width  = to_u32(gltf_image.width),
-		        .height = to_u32(gltf_image.height),
-		        .depth  = 1,
-		    },
-		    .format = (idx == 0 || idx == 2) ? vk::Format::eR8G8B8A8Srgb : vk::Format::eR8G8B8A8Unorm,
-		    .levels = 1,
-		};
+	Image vk_image = device_.get_device_memory_allocator().allocate_device_only_image(img_cinfo);
 
-		vk::ImageCreateInfo img_cinfo{
-		    .imageType   = vk::ImageType::e2D,
-		    .format      = img_tinfo.format,
-		    .extent      = img_tinfo.extent,
-		    .mipLevels   = img_tinfo.levels,
-		    .arrayLayers = 1,
-		    .samples     = vk::SampleCountFlagBits::e1,
-		    .tiling      = vk::ImageTiling::eOptimal,
-		    .usage       = vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst,
-		    .sharingMode = vk::SharingMode::eExclusive,
-		};
+	vk::ImageViewCreateInfo view_cinfo = ImageView::two_dim_view_cinfo(vk_image.get_handle(), img_cinfo.format, vk::ImageAspectFlagBits::eColor, img_cinfo.mipLevels);
 
-		ImageResource resource = ImageResource(device_.get_device_memory_allocator().allocate_device_only_image(img_cinfo));
-
-		vk::ImageViewCreateInfo view_cinfo = ImageView::two_dim_view_cinfo(resource.get_image().get_handle(), img_cinfo.format, vk::ImageAspectFlagBits::eColor, 1);
-		resource.create_view(device_, view_cinfo);
-
-		p_image = std::make_unique<sg::Image>(std::move(resource), std::move(img_tinfo), gltf_image.name);
-	}
-	else
-	{
-		std::string path = model_path_ + "/" + gltf_image.uri;
-		p_image          = std::make_unique<sg::Image>(ImageResource::load_two_dim_image(device_, path), gltf_image.name);
-	}
-
-	return p_image;
+	image.set_resource(ImageResource(std::move(vk_image), ImageView(device_, view_cinfo)));
 }
 
 void GLTFLoader::load_textures()
@@ -287,6 +297,7 @@ void GLTFLoader::load_textures()
 		std::unique_ptr<sg::Texture> p_texture = parse_texture(gltf_texture);
 		assert(gltf_texture.source < p_images.size());
 		p_texture->p_resource_ = &p_images[gltf_texture.source]->get_resource();
+
 		if (gltf_texture.sampler >= 0 && gltf_texture.sampler < static_cast<int>(p_samplers.size()))
 		{
 			p_texture->p_sampler_ = p_samplers[gltf_texture.sampler];
@@ -302,17 +313,15 @@ void GLTFLoader::load_textures()
 		p_scene_->add_component(std::move(p_texture));
 	}
 
-	std::unique_ptr<sg::Image> p_default_image = create_default_texture_image();
-	p_scene_->add_component(create_default_texture(*p_default_sampler, *p_default_image));
-	p_scene_->add_component(std::move(p_default_image));
+	p_scene_->add_component(create_default_texture(*p_default_sampler));
 	p_scene_->add_component(std::move(p_default_sampler));
 }
 
-std::unique_ptr<sg::Texture> GLTFLoader::create_default_texture(sg::Sampler &default_sampler, sg::Image &default_image) const
+std::unique_ptr<sg::Texture> GLTFLoader::create_default_texture(sg::Sampler &default_sampler) const
 {
 	std::unique_ptr<sg::Texture> p_texture = std::make_unique<sg::Texture>("default_texture");
 	std::unique_ptr<sg::Image>   p_image   = create_default_texture_image();
-	p_texture->p_resource_                 = &default_image.get_resource();
+	p_texture->p_resource_                 = &p_image->get_resource();
 	p_texture->p_sampler_                  = &default_sampler;
 	p_scene_->add_component(std::move(p_image));
 	return p_texture;
@@ -336,11 +345,10 @@ std::unique_ptr<sg::Image> GLTFLoader::create_default_texture_image() const
 	    .sharingMode = vk::SharingMode::eExclusive,
 	};
 
-	ImageResource resource = ImageResource(device_.get_device_memory_allocator().allocate_device_only_image(image_cinfo));
+	Image img = device_.get_device_memory_allocator().allocate_device_only_image(image_cinfo);
 
-	vk::ImageViewCreateInfo view_cinfo = ImageView::two_dim_view_cinfo(resource.get_image().get_handle(), image_cinfo.format, vk::ImageAspectFlagBits::eColor, 1);
-	resource.create_view(device_, view_cinfo);
-	ImageTransferInfo img_tinfo;
+	vk::ImageViewCreateInfo view_cinfo = ImageView::two_dim_view_cinfo(img.get_handle(), image_cinfo.format, vk::ImageAspectFlagBits::eColor, 1);
+	ImageResource           resource   = ImageResource(std::move(img), ImageView(device_, view_cinfo));
 
 	std::vector<uint8_t> binary = {0u, 0u, 0u, 0u};
 
@@ -355,7 +363,7 @@ std::unique_ptr<sg::Image> GLTFLoader::create_default_texture_image() const
 
 	device_.end_one_time_buf(cmd_buf);
 
-	return std::make_unique<sg::Image>(std::move(resource), std::move(img_tinfo), "default_image");
+	return std::make_unique<sg::Image>(std::move(resource), "default_image");
 }
 std::unique_ptr<sg::Texture> GLTFLoader::parse_texture(
     const tinygltf::Texture &gltf_texture) const
@@ -439,14 +447,20 @@ std::unique_ptr<sg::PBRMaterial> GLTFLoader::parse_material(
 	return material;
 }
 
-void GLTFLoader::append_textures_to_material(tinygltf::ParameterMap &parameter_map, std::vector<sg::Texture *> p_textures, sg::PBRMaterial *p_material)
+void GLTFLoader::append_textures_to_material(tinygltf::ParameterMap &parameter_map, std::vector<sg::Texture *> &p_textures, sg::PBRMaterial *p_material)
 {
+	// Edit img formats here
 	for (auto &value : parameter_map)
 	{
 		if (value.first.find("Texture") != std::string::npos)
 		{
+			int         texture_idx  = value.second.TextureIndex();
 			std::string texture_name = to_snake_case(to_string(value.first));
-			assert(value.second.TextureIndex() < p_textures.size());
+			assert(texture_idx < p_textures.size());
+			if (texture_name == "base_color_texture" || texture_name == "emissive_texture")
+			{
+				img_tinfos_[gltf_model_.textures[texture_idx].source].meta.format = vk::Format::eR8G8B8A8Srgb;
+			}
 			p_material->texture_map_[texture_name] = p_textures[value.second.TextureIndex()];
 		}
 	}

@@ -65,8 +65,8 @@ class PBRBaker
 	void prepare_prefilter();
 	void prepare_irradiance();
 	void prepare_brdf_lut();
-	void bake_irradiance(ImageTransferInfo &cube_tinfo);
-	void bake_prefilter(ImageTransferInfo &cube_tinfo);
+	void bake_irradiance(ImageMetaInfo &cube_meta);
+	void bake_prefilter(ImageMetaInfo &cube_meta);
 	void bake_brdf_lut();
 
 	void draw_box(CommandBuffer &cmd_buf);
@@ -77,8 +77,8 @@ class PBRBaker
 	Framebuffer              create_square_framebuffer(const RenderPass &render_pass, const ImageView &view, uint32_t dimension);
 	GraphicsPipeline         create_graphics_pipeline(RenderPass &render_pass, vk::PipelineLayoutCreateInfo &ppl_layout_cinfo, const char *vert_shader_name, const char *frag_shader_name);
 	DescriptorAllocation     allocate_texture_descriptor(Texture &texture);
-	std::unique_ptr<Texture> create_empty_cube_texture(ImageTransferInfo &cube_tinfo);
-	ImageResource            create_empty_cubic_img_resource(ImageTransferInfo &img_tinfo);
+	std::unique_ptr<Texture> create_empty_cube_texture(ImageMetaInfo &cube_meta);
+	ImageResource            create_empty_cubic_img_resource(ImageMetaInfo &img_tinfo);
 	void                     create_brdf_lut_texture();
 
 	Device         &device_;

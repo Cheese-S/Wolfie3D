@@ -86,29 +86,30 @@ void PBRBaker::load_cube_model()
 
 void PBRBaker::load_background()
 {
-	std::string     path   = fu::compute_abs_path(fu::FileType::eImage, "papermill.dds");
-	ImageLoadResult result = ImageResource::load_cubic_image(device_, path);
+	std::string       path      = fu::compute_abs_path(fu::FileType::eImage, "papermill.dds");
+	ImageTransferInfo img_tinfo = ImageResource::load_cubic_image(path);
+	ImageResource     resource  = ImageResource::create_empty_cubic_img_resrc(device_, img_tinfo.meta);
 
 	CommandBuffer cmd_buf     = device_.begin_one_time_buf();
-	Buffer        staging_buf = device_.get_device_memory_allocator().allocate_staging_buffer(result.image_tifno.binary.size());
-	staging_buf.update(result.image_tifno.binary);
+	Buffer        staging_buf = device_.get_device_memory_allocator().allocate_staging_buffer(img_tinfo.binary.size());
+	staging_buf.update(img_tinfo.binary);
 
-	cmd_buf.set_image_layout(result.resource, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal, vk::PipelineStageFlagBits::eHost, vk::PipelineStageFlagBits::eTransfer);
+	cmd_buf.set_image_layout(resource, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal, vk::PipelineStageFlagBits::eHost, vk::PipelineStageFlagBits::eTransfer);
 
-	cmd_buf.update_image(result.resource, staging_buf);
+	cmd_buf.update_image(resource, staging_buf);
 
-	cmd_buf.set_image_layout(result.resource, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal, vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eFragmentShader);
+	cmd_buf.set_image_layout(resource, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal, vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eFragmentShader);
 
 	device_.end_one_time_buf(cmd_buf);
 
-	vk::SamplerCreateInfo sampler_cinfo = Sampler::linear_clamp_cinfo(device_.get_physical_device(), result.image_tifno.levels);
+	vk::SamplerCreateInfo sampler_cinfo = Sampler::linear_clamp_cinfo(device_.get_physical_device(), img_tinfo.meta.levels);
 
-	result_.p_background = std::make_unique<Texture>(std::move(result.resource), Sampler(device_, sampler_cinfo));
+	result_.p_background = std::make_unique<Texture>(std::move(resource), Sampler(device_, sampler_cinfo));
 }
 
 void PBRBaker::prepare_irradiance()
 {
-	ImageTransferInfo cube_tinfo{
+	ImageMetaInfo cube_meta{
 	    .extent = {
 	        .width  = IRRADIANCE_DIMENSION,
 	        .height = IRRADIANCE_DIMENSION,
@@ -117,19 +118,19 @@ void PBRBaker::prepare_irradiance()
 	    .format = vk::Format::eR32G32B32A32Sfloat,
 	    .levels = max_mip_levels(IRRADIANCE_DIMENSION, IRRADIANCE_DIMENSION),
 	};
-	result_.p_irradiance = create_empty_cube_texture(cube_tinfo);
+	result_.p_irradiance = create_empty_cube_texture(cube_meta);
 	if (rdoc_api)
 		rdoc_api->StartFrameCapture(NULL, NULL);
-	bake_irradiance(cube_tinfo);
+	bake_irradiance(cube_meta);
 	if (rdoc_api)
 		rdoc_api->EndFrameCapture(NULL, NULL);
 };
 
-void PBRBaker::bake_irradiance(ImageTransferInfo &cube_tinfo)
+void PBRBaker::bake_irradiance(ImageMetaInfo &cube_meta)
 {
-	RenderPass           render_pass        = create_color_only_renderpass(cube_tinfo.format);
-	ImageResource        transfer_src_resrc = create_transfer_src(cube_tinfo.extent, cube_tinfo.format);
-	Framebuffer          framebuffer        = create_square_framebuffer(render_pass, transfer_src_resrc.get_view(), cube_tinfo.extent.width);
+	RenderPass           render_pass        = create_color_only_renderpass(cube_meta.format);
+	ImageResource        transfer_src_resrc = create_transfer_src(cube_meta.extent, cube_meta.format);
+	Framebuffer          framebuffer        = create_square_framebuffer(render_pass, transfer_src_resrc.get_view(), cube_meta.extent.width);
 	DescriptorAllocation desc_allocation    = allocate_texture_descriptor(*result_.p_background);
 
 	vk::PushConstantRange push_constant_range{
@@ -155,8 +156,8 @@ void PBRBaker::bake_irradiance(ImageTransferInfo &cube_tinfo)
 	    .framebuffer = framebuffer.get_handle(),
 	    .renderArea  = {
 	         .extent = {
-	             .width  = cube_tinfo.extent.width,
-	             .height = cube_tinfo.extent.height,
+	             .width  = cube_meta.extent.width,
+	             .height = cube_meta.extent.height,
             }},
 	    .clearValueCount = to_u32(clear_values.size()),
 	    .pClearValues    = clear_values.data(),
@@ -174,21 +175,21 @@ void PBRBaker::bake_irradiance(ImageTransferInfo &cube_tinfo)
 	        .y = 0,
 	    },
 	    .extent = {
-	        .width  = cube_tinfo.extent.width,
-	        .height = cube_tinfo.extent.height,
+	        .width  = cube_meta.extent.width,
+	        .height = cube_meta.extent.height,
 	    },
 	};
 
 	bake_buf.set_image_layout(result_.p_irradiance->resource, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal, vk::PipelineStageFlagBits::eHost, vk::PipelineStageFlagBits::eTransfer);
 
-	uint32_t  img_width  = cube_tinfo.extent.width;
-	uint32_t  img_height = cube_tinfo.extent.height;
+	uint32_t  img_width  = cube_meta.extent.width;
+	uint32_t  img_height = cube_meta.extent.height;
 	glm::mat4 pco        = glm::mat4(1.0f);
 
-	for (uint32_t m = 0; m < cube_tinfo.levels; m++)
+	for (uint32_t m = 0; m < cube_meta.levels; m++)
 	{
-		img_width  = std::max(1u, cube_tinfo.extent.width >> m);
-		img_height = std::max(1u, cube_tinfo.extent.height >> m);
+		img_width  = std::max(1u, cube_meta.extent.width >> m);
+		img_height = std::max(1u, cube_meta.extent.height >> m);
 		for (uint32_t f = 0; f < 6; f++)
 		{
 			viewport.width  = img_width;
@@ -236,7 +237,7 @@ void PBRBaker::bake_irradiance(ImageTransferInfo &cube_tinfo)
 
 void PBRBaker::prepare_prefilter()
 {
-	ImageTransferInfo cube_tinfo{
+	ImageMetaInfo cube_meta{
 	    .extent = {
 	        .width  = PREFILTER_DIMENSION,
 	        .height = PREFILTER_DIMENSION,
@@ -245,19 +246,19 @@ void PBRBaker::prepare_prefilter()
 	    .format = vk::Format::eR16G16B16A16Sfloat,
 	    .levels = max_mip_levels(PREFILTER_DIMENSION, PREFILTER_DIMENSION),
 	};
-	result_.p_prefilter = create_empty_cube_texture(cube_tinfo);
+	result_.p_prefilter = create_empty_cube_texture(cube_meta);
 	if (rdoc_api)
 		rdoc_api->StartFrameCapture(NULL, NULL);
-	bake_prefilter(cube_tinfo);
+	bake_prefilter(cube_meta);
 	if (rdoc_api)
 		rdoc_api->EndFrameCapture(NULL, NULL);
 }
 
-void PBRBaker::bake_prefilter(ImageTransferInfo &cube_tinfo)
+void PBRBaker::bake_prefilter(ImageMetaInfo &cube_meta)
 {
-	RenderPass           render_pass        = create_color_only_renderpass(cube_tinfo.format);
-	ImageResource        transfer_src_resrc = create_transfer_src(cube_tinfo.extent, cube_tinfo.format);
-	Framebuffer          framebuffer        = create_square_framebuffer(render_pass, transfer_src_resrc.get_view(), cube_tinfo.extent.width);
+	RenderPass           render_pass        = create_color_only_renderpass(cube_meta.format);
+	ImageResource        transfer_src_resrc = create_transfer_src(cube_meta.extent, cube_meta.format);
+	Framebuffer          framebuffer        = create_square_framebuffer(render_pass, transfer_src_resrc.get_view(), cube_meta.extent.width);
 	DescriptorAllocation desc_allocation    = allocate_texture_descriptor(*result_.p_background);
 
 	struct PCO
@@ -288,8 +289,8 @@ void PBRBaker::bake_prefilter(ImageTransferInfo &cube_tinfo)
 	    .framebuffer = framebuffer.get_handle(),
 	    .renderArea  = {
 	         .extent = {
-	             .width  = cube_tinfo.extent.width,
-	             .height = cube_tinfo.extent.height,
+	             .width  = cube_meta.extent.width,
+	             .height = cube_meta.extent.height,
             },
         },
 	    .clearValueCount = to_u32(clear_values.size()),
@@ -308,22 +309,22 @@ void PBRBaker::bake_prefilter(ImageTransferInfo &cube_tinfo)
 	        .y = 0,
 	    },
 	    .extent = {
-	        .width  = cube_tinfo.extent.width,
-	        .height = cube_tinfo.extent.height,
+	        .width  = cube_meta.extent.width,
+	        .height = cube_meta.extent.height,
 	    },
 	};
 
 	bake_buf.set_image_layout(result_.p_prefilter->resource, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal, vk::PipelineStageFlagBits::eHost, vk::PipelineStageFlagBits::eTransfer);
 
-	uint32_t img_width  = cube_tinfo.extent.width;
-	uint32_t img_height = cube_tinfo.extent.height;
+	uint32_t img_width  = cube_meta.extent.width;
+	uint32_t img_height = cube_meta.extent.height;
 	uint32_t div        = 1u;
 
-	for (uint32_t m = 0; m < cube_tinfo.levels; m++)
+	for (uint32_t m = 0; m < cube_meta.levels; m++)
 	{
-		img_width     = std::max(1u, cube_tinfo.extent.width >> m);
-		img_height    = std::max(1u, cube_tinfo.extent.height >> m);
-		pco.roughness = m / static_cast<float>(cube_tinfo.levels - 1);
+		img_width     = std::max(1u, cube_meta.extent.width >> m);
+		img_height    = std::max(1u, cube_meta.extent.height >> m);
+		pco.roughness = m / static_cast<float>(cube_meta.levels - 1);
 		for (uint32_t f = 0; f < 6; f++)
 		{
 			viewport.width  = img_width;
@@ -394,14 +395,17 @@ void PBRBaker::create_brdf_lut_texture()
 	    .usage       = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled,
 	};
 
-	ImageResource resource = device_.get_device_memory_allocator().allocate_device_only_image(image_cinfo);
+	Image img = device_.get_device_memory_allocator().allocate_device_only_image(image_cinfo);
 
-	vk::ImageViewCreateInfo view_cinfo = ImageView::two_dim_view_cinfo(resource.get_image().get_handle(), vk::Format::eR16G16Sfloat, vk::ImageAspectFlagBits::eColor, 1);
-	resource.create_view(device_, view_cinfo);
+	vk::ImageViewCreateInfo view_cinfo = ImageView::two_dim_view_cinfo(img.get_handle(), vk::Format::eR16G16Sfloat, vk::ImageAspectFlagBits::eColor, 1);
+
+	ImageView view = ImageView(device_, view_cinfo);
 
 	vk::SamplerCreateInfo sample_cinfo = Sampler::linear_clamp_cinfo(device_.get_physical_device(), 1);
 
-	result_.p_brdf_lut = std::make_unique<Texture>(std::move(resource), Sampler(device_, sample_cinfo));
+	result_.p_brdf_lut = std::make_unique<Texture>(
+	    ImageResource(std::move(img), std::move(view)),
+	    Sampler(device_, sample_cinfo));
 }
 
 void PBRBaker::bake_brdf_lut()
@@ -474,21 +478,21 @@ void PBRBaker::bake_brdf_lut()
 	device_.end_one_time_buf(bake_buf);
 }
 
-std::unique_ptr<Texture> PBRBaker::create_empty_cube_texture(ImageTransferInfo &cube_tinfo)
+std::unique_ptr<Texture> PBRBaker::create_empty_cube_texture(ImageMetaInfo &cube_meta)
 {
-	vk::SamplerCreateInfo sampler_cinfo = Sampler::linear_clamp_cinfo(device_.get_physical_device(), cube_tinfo.levels);
+	vk::SamplerCreateInfo sampler_cinfo = Sampler::linear_clamp_cinfo(device_.get_physical_device(), cube_meta.levels);
 
-	return std::make_unique<Texture>(create_empty_cubic_img_resource(cube_tinfo), Sampler(device_, sampler_cinfo));
+	return std::make_unique<Texture>(create_empty_cubic_img_resource(cube_meta), Sampler(device_, sampler_cinfo));
 }
 
-ImageResource PBRBaker::create_empty_cubic_img_resource(ImageTransferInfo &img_tinfo)
+ImageResource PBRBaker::create_empty_cubic_img_resource(ImageMetaInfo &meta)
 {
 	vk::ImageCreateInfo img_cinfo{
 	    .flags       = vk::ImageCreateFlagBits::eCubeCompatible,
 	    .imageType   = vk::ImageType::e2D,
-	    .format      = img_tinfo.format,
-	    .extent      = img_tinfo.extent,
-	    .mipLevels   = img_tinfo.levels,
+	    .format      = meta.format,
+	    .extent      = meta.extent,
+	    .mipLevels   = meta.levels,
 	    .arrayLayers = 6,
 	    .samples     = vk::SampleCountFlagBits::e1,
 	    .tiling      = vk::ImageTiling::eOptimal,
@@ -496,12 +500,11 @@ ImageResource PBRBaker::create_empty_cubic_img_resource(ImageTransferInfo &img_t
 	    .sharingMode = vk::SharingMode::eExclusive,
 	};
 
-	ImageResource resource = ImageResource(device_.get_device_memory_allocator().allocate_device_only_image(img_cinfo));
+	Image img = device_.get_device_memory_allocator().allocate_device_only_image(img_cinfo);
 
-	vk::ImageViewCreateInfo view_cinfo = ImageView::cube_view_cinfo(resource.get_image().get_handle(), img_tinfo.format, vk::ImageAspectFlagBits::eColor, img_tinfo.levels);
+	vk::ImageViewCreateInfo view_cinfo = ImageView::cube_view_cinfo(img.get_handle(), meta.format, vk::ImageAspectFlagBits::eColor, meta.levels);
 
-	resource.create_view(device_, view_cinfo);
-	return resource;
+	return ImageResource(std::move(img), ImageView(device_, view_cinfo));
 }
 
 RenderPass PBRBaker::create_color_only_renderpass(vk::Format format, vk::ImageLayout initial_layout, vk::ImageLayout final_layout)
@@ -565,18 +568,17 @@ ImageResource PBRBaker::create_transfer_src(vk::Extent3D extent, vk::Format form
 	    .initialLayout = vk::ImageLayout::eUndefined,
 	};
 
-	ImageResource resource(device_.get_device_memory_allocator().allocate_device_only_image(transfer_src_cinfo));
+	Image img = device_.get_device_memory_allocator().allocate_device_only_image(transfer_src_cinfo);
 
-	vk::ImageViewCreateInfo view_cinfo = ImageView::two_dim_view_cinfo(resource.get_image().get_handle(), format, vk::ImageAspectFlagBits::eColor, 1);
-	resource.create_view(device_, view_cinfo);
+	vk::ImageViewCreateInfo view_cinfo = ImageView::two_dim_view_cinfo(img.get_handle(), format, vk::ImageAspectFlagBits::eColor, 1);
 
-	vk::ImageView view_handle = resource.get_view().get_handle();
+	ImageResource resrc = ImageResource(std::move(img), ImageView(device_, view_cinfo));
 
 	CommandBuffer cmd_buf = device_.begin_one_time_buf();
-	cmd_buf.set_image_layout(resource, vk::ImageLayout::eUndefined, vk::ImageLayout::eColorAttachmentOptimal);
+	cmd_buf.set_image_layout(resrc, vk::ImageLayout::eUndefined, vk::ImageLayout::eColorAttachmentOptimal);
 	device_.end_one_time_buf(cmd_buf);
 
-	return resource;
+	return resrc;
 }
 
 Framebuffer PBRBaker::create_square_framebuffer(const RenderPass &render_pass, const ImageView &view, uint32_t dimension)

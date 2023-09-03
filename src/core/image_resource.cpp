@@ -22,15 +22,19 @@ uint8_t ImageResource::format_to_bits_per_pixel(vk::Format format)
 	return conversion_map[format];
 }
 
-ImageLoadResult ImageResource::load_two_dim_image(const Device &device, const std::string &path)
+ImageTransferInfo ImageResource::load_two_dim_image(const std::string &path)
 {
-	ImageTransferInfo img_tinfo = stb_load(path);
+	// We only use stb now, but we can add more later
+	return stb_load(path);
+};
 
+ImageResource ImageResource::create_empty_two_dim_img_resrc(const Device &device, const ImageMetaInfo &meta)
+{
 	vk::ImageCreateInfo img_cinfo{
 	    .imageType   = vk::ImageType::e2D,
-	    .format      = img_tinfo.format,
-	    .extent      = img_tinfo.extent,
-	    .mipLevels   = img_tinfo.levels,
+	    .format      = meta.format,
+	    .extent      = meta.extent,
+	    .mipLevels   = meta.levels,
 	    .arrayLayers = 1,
 	    .samples     = vk::SampleCountFlagBits::e1,
 	    .tiling      = vk::ImageTiling::eOptimal,
@@ -38,16 +42,13 @@ ImageLoadResult ImageResource::load_two_dim_image(const Device &device, const st
 	    .sharingMode = vk::SharingMode::eExclusive,
 	};
 
-	ImageResource resource = ImageResource(device.get_device_memory_allocator().allocate_device_only_image(img_cinfo));
+	Image img = device.get_device_memory_allocator().allocate_device_only_image(img_cinfo);
 
-	vk::ImageViewCreateInfo view_cinfo = ImageView::two_dim_view_cinfo(resource.get_image().get_handle(), img_cinfo.format, vk::ImageAspectFlagBits::eColor, img_tinfo.levels);
-	resource.create_view(device, view_cinfo);
+	vk::ImageViewCreateInfo view_cinfo = ImageView::two_dim_view_cinfo(img.get_handle(), img_cinfo.format, vk::ImageAspectFlagBits::eColor, meta.levels);
+	ImageResource           resource   = ImageResource(std::move(img), ImageView(device, view_cinfo));
 
-	return {
-	    .resource    = std::move(resource),
-	    .image_tifno = std::move(img_tinfo),
-	};
-};
+	return resource;
+}
 
 ImageTransferInfo stb_load(const std::string &path)
 {
@@ -77,25 +78,31 @@ ImageTransferInfo stb_load(const std::string &path)
 
 	return {
 	    .binary = std::move(img_binary),
-	    .extent = {
-	        .width  = to_u32(width),
-	        .height = to_u32(height),
-	        .depth  = 1,
-	    },
-	    .format = vk::Format::eR8G8B8A8Srgb,
-	    .levels = 1,
+	    .meta   = {
+	          .extent = {
+	              .width  = to_u32(width),
+	              .height = to_u32(height),
+	              .depth  = 1,
+            },
+	          .format = vk::Format::eR8G8B8A8Srgb,
+	          .levels = 1,
+        },
 	};
 }
 
-ImageLoadResult ImageResource::load_cubic_image(const Device &device, const std::string &path)
+ImageTransferInfo ImageResource::load_cubic_image(const std::string &path)
 {
-	ImageTransferInfo   img_tinfo = gli_load(path);
+	return gli_load(path);
+}
+
+ImageResource ImageResource::create_empty_cubic_img_resrc(const Device &device, const ImageMetaInfo &meta)
+{
 	vk::ImageCreateInfo img_cinfo{
 	    .flags       = vk::ImageCreateFlagBits::eCubeCompatible,
 	    .imageType   = vk::ImageType::e2D,
-	    .format      = img_tinfo.format,
-	    .extent      = img_tinfo.extent,
-	    .mipLevels   = img_tinfo.levels,
+	    .format      = meta.format,
+	    .extent      = meta.extent,
+	    .mipLevels   = meta.levels,
 	    .arrayLayers = 6,
 	    .samples     = vk::SampleCountFlagBits::e1,
 	    .tiling      = vk::ImageTiling::eOptimal,
@@ -103,15 +110,12 @@ ImageLoadResult ImageResource::load_cubic_image(const Device &device, const std:
 	    .sharingMode = vk::SharingMode::eExclusive,
 	};
 
-	ImageResource resource = ImageResource(device.get_device_memory_allocator().allocate_device_only_image(img_cinfo));
+	Image img = device.get_device_memory_allocator().allocate_device_only_image(img_cinfo);
 
-	vk::ImageViewCreateInfo view_cinfo = ImageView::cube_view_cinfo(resource.get_image().get_handle(), img_cinfo.format, vk::ImageAspectFlagBits::eColor, img_tinfo.levels);
-	resource.create_view(device, view_cinfo);
+	vk::ImageViewCreateInfo view_cinfo = ImageView::cube_view_cinfo(img.get_handle(), img_cinfo.format, vk::ImageAspectFlagBits::eColor, meta.levels);
+	ImageResource           resource   = ImageResource(std::move(img), ImageView(device, view_cinfo));
 
-	return {
-	    .resource    = std::move(resource),
-	    .image_tifno = std::move(img_tinfo),
-	};
+	return resource;
 }
 
 ImageTransferInfo gli_load(const std::string &path)
@@ -143,41 +147,52 @@ ImageTransferInfo gli_load(const std::string &path)
 
 	return {
 	    .binary = std::move(img_binary),
-	    .extent = {
-	        .width  = to_u32(gli_cube.extent().x),
-	        .height = to_u32(gli_cube.extent().y),
-	        .depth  = 1,
-	    },
-	    .format = gli_to_vk_format_map.at(gli_cube.format()),
-	    .levels = to_u32(gli_cube.levels()),
+	    .meta   = {
+	          .extent = {
+	              .width  = to_u32(gli_cube.extent().x),
+	              .height = to_u32(gli_cube.extent().y),
+	              .depth  = 1,
+            },
+	          .format = gli_to_vk_format_map.at(gli_cube.format()),
+	          .levels = to_u32(gli_cube.levels()),
+        },
 	};
 }
 
-ImageResource::ImageResource(Image &&image) :
-    image_(std::move(image)){
+ImageResource::ImageResource(const Device &device, std::nullptr_t nptr) :
+    image_(device.get_device_memory_allocator().allocate_null_image()),
+    view_(device, nptr)
+{
+}
+
+ImageResource::ImageResource(Image &&image, ImageView &&view) :
+    image_(std::move(image)),
+    view_(std::move(view)){
 
     };
 
 ImageResource::ImageResource(ImageResource &&rhs) :
     image_(std::move(rhs.image_)),
-    p_view_(std::move(rhs.p_view_))
+    view_(std::move(rhs.view_))
 {
 }
+
+ImageResource &ImageResource::operator=(ImageResource &&rhs)
+{
+	image_ = std::move(rhs.image_);
+	view_  = std::move(rhs.view_);
+	return *this;
+};
 
 ImageResource::~ImageResource(){};
-
-void ImageResource::create_view(const Device &device, vk::ImageViewCreateInfo &image_view_cinfo)
-{
-	p_view_ = std::make_unique<ImageView>(device, image_view_cinfo);
-}
 
 Image &ImageResource::get_image()
 {
 	return image_;
 }
 
-ImageView &ImageResource::get_view() const
+const ImageView &ImageResource::get_view() const
 {
-	return *p_view_;
+	return view_;
 }
 };        // namespace W3D

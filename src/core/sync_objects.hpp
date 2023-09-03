@@ -10,6 +10,7 @@ class Device;
 class Fence : public VulkanObject<vk::Fence>
 {
   public:
+	Fence(Device &device, std::nullptr_t nptr);
 	Fence(Device &device, vk::FenceCreateFlags flags);
 	Fence(Fence &&);
 	~Fence() override;
@@ -21,6 +22,7 @@ class Fence : public VulkanObject<vk::Fence>
 class Semaphore : public VulkanObject<vk::Semaphore>
 {
   public:
+	Semaphore(Device &device, std::nullptr_t nptr);
 	Semaphore(Device &device);
 	Semaphore(Semaphore &&);
 	~Semaphore() override;

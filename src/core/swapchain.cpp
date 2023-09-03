@@ -109,10 +109,10 @@ void Swapchain::create_frame_resources()
 	    .sharingMode   = vk::SharingMode::eExclusive,
 	    .initialLayout = vk::ImageLayout::eUndefined,
 	};
-	p_depth_resource_ = std::make_unique<ImageResource>(device_.get_device_memory_allocator().allocate_device_only_image(depth_image_cinfo));
+	Image img = device_.get_device_memory_allocator().allocate_device_only_image(depth_image_cinfo);
 
-	vk::ImageViewCreateInfo depth_image_view_cinfo = ImageView::two_dim_view_cinfo(p_depth_resource_->get_image().get_handle(), depth_image_cinfo.format, vk::ImageAspectFlagBits::eDepth, 1);
-	p_depth_resource_->create_view(device_, depth_image_view_cinfo);
+	vk::ImageViewCreateInfo depth_image_view_cinfo = ImageView::two_dim_view_cinfo(img.get_handle(), depth_image_cinfo.format, vk::ImageAspectFlagBits::eDepth, 1);
+	p_depth_resource_                              = std::make_unique<ImageResource>(std::move(img), ImageView(device_, depth_image_view_cinfo));
 }
 
 vk::Format Swapchain::choose_depth_format()

@@ -16,19 +16,19 @@ namespace sg
 class Image : public Component
 {
   public:
-	Image(ImageLoadResult &&result, const std::string &name);
-	Image(ImageResource &&resource, ImageTransferInfo &&image_tinfo, const std::string &name);
+	Image(ImageResource &&resrc, const std::string &name);
 	Image(Image &&);
 
 	virtual ~Image() = default;
 	virtual std::type_index get_type() override;
 
 	ImageResource           &get_resource();
-	const ImageTransferInfo &get_image_transferinfo();
+	const ImageTransferInfo &get_image_transfer_info();
+
+	void set_resource(ImageResource &&resource);
 
   private:
-	ImageResource                      resource_;
-	std::unique_ptr<ImageTransferInfo> p_image_info_ = nullptr;
+	ImageResource resource_;
 };
 }        // namespace sg
 

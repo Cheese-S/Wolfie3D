@@ -10,14 +10,6 @@ namespace W3D
 
 class DeviceMemoryAllocator;
 
-struct DeviceAllocation
-{
-	VmaAllocator          allocator;
-	VmaAllocation         allocation;
-	VmaAllocationInfo     allocation_info;
-	VkMemoryPropertyFlags flags;
-};
-
 struct DeviceAllocationDetails
 {
 	VmaAllocator          allocator;

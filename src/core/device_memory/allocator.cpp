@@ -78,6 +78,11 @@ Buffer DeviceMemoryAllocator::allocate_buffer(vk::BufferCreateInfo &buffer_cinfo
 	return Buffer(Key<DeviceMemoryAllocator>{}, handle_, buffer_cinfo, allocation_cinfo);
 }
 
+Buffer DeviceMemoryAllocator::allocate_null_buffer() const
+{
+	return Buffer(Key<DeviceMemoryAllocator>{}, handle_, nullptr);
+}
+
 Image DeviceMemoryAllocator::allocate_device_only_image(vk::ImageCreateInfo &image_cinfo) const
 {
 	VmaAllocationCreateInfo allocation_cinfo{};
@@ -91,5 +96,10 @@ Image DeviceMemoryAllocator::allocate_image(vk::ImageCreateInfo &image_cinfo, Vm
 {
 	return Image(Key<DeviceMemoryAllocator>{}, handle_, image_cinfo, allocation_cinfo);
 }
+
+Image DeviceMemoryAllocator::allocate_null_image() const
+{
+	return Image(Key<DeviceMemoryAllocator>{}, handle_, nullptr);
+};
 
 }        // namespace W3D

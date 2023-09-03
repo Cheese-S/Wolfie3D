@@ -4,6 +4,11 @@
 
 namespace W3D
 {
+Fence::Fence(Device &device, std::nullptr_t nptr) :
+    device_(device)
+{
+}
+
 Fence::Fence(Device &device, vk::FenceCreateFlags flags) :
     device_(device)
 {

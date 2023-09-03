@@ -8,17 +8,9 @@
 namespace W3D::sg
 {
 
-Image::Image(ImageLoadResult &&result, const std::string &name) :
+Image::Image(ImageResource &&resource, const std::string &name) :
     Component(name),
-    resource_(std::move(result.resource)),
-    p_image_info_(std::make_unique<ImageTransferInfo>())
-{
-}
-
-Image::Image(ImageResource &&resource, ImageTransferInfo &&image_tinfo, const std::string &name) :
-    Component(name),
-    resource_(std::move(resource)),
-    p_image_info_(std::make_unique<ImageTransferInfo>(std::move(image_tinfo)))
+    resource_(std::move(resource))
 {
 }
 
@@ -38,9 +30,9 @@ ImageResource &Image::get_resource()
 	return resource_;
 }
 
-const ImageTransferInfo &Image::get_image_transferinfo()
+void Image::set_resource(ImageResource &&resource)
 {
-	return *p_image_info_;
+	resource_ = std::move(resource);
 }
 
 // std::unique_ptr<Image> Image::load(const std::string &name, const std::string &uri)
