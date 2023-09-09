@@ -19,6 +19,6 @@ layout(location = 2) out vec3 frag_uvw;
 void main() {
     gl_Position = ubo.proj_view * pco.model * vec4(position, 1.0);
     frag_uvw = vec3(pco.model * vec4(position, 1.0));
-    out_normal = normalize(transpose(inverse(mat3(pco.model))) * normal);
+    out_normal = transpose(inverse(mat3(pco.model))) * normal;
     out_uv = uv;
 }

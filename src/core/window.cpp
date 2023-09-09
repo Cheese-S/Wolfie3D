@@ -24,6 +24,9 @@ inline KeyCode translate_key_code(int key)
 	    {GLFW_KEY_S, KeyCode::eS},
 	    {GLFW_KEY_A, KeyCode::eA},
 	    {GLFW_KEY_D, KeyCode::eD},
+	    {GLFW_KEY_1, KeyCode::e1},
+	    {GLFW_KEY_2, KeyCode::e2},
+	    {GLFW_KEY_3, KeyCode::e3},
 	};
 	auto it = key_lookup.find(key);
 	if (it == key_lookup.end())

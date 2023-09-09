@@ -2,6 +2,7 @@
 
 #include <queue>
 
+#include "controller.hpp"
 #include "gltf_loader.hpp"
 
 #include "common/cvar.hpp"
@@ -22,7 +23,6 @@
 #include "core/render_pass.hpp"
 #include "core/swapchain.hpp"
 #include "core/window.hpp"
-
 #include "scene_graph/components/camera.hpp"
 #include "scene_graph/components/mesh.hpp"
 #include "scene_graph/components/pbr_material.hpp"
@@ -31,11 +31,20 @@
 #include "scene_graph/components/texture.hpp"
 #include "scene_graph/scene.hpp"
 #include "scene_graph/script.hpp"
+#include "scene_graph/scripts/free_camera.hpp"
+#include "scene_graph/scripts/player.hpp"
 
 namespace W3D
 {
 const uint32_t Renderer::NUM_INFLIGHT_FRAMES  = 2;
 const uint32_t Renderer::IRRADIANCE_DIMENSION = 2;
+const int      NUM_LIGHTS                     = 4;
+glm::vec3      LIGHT_POSITIONS[NUM_LIGHTS]    = {
+    glm::vec3(6.0f, 0.0f, 0.0f),
+    glm::vec3(-3.0f, 0.0f, 0.0f),
+    glm::vec3(0.0f, -6.0f, 6.0f),
+    glm::vec3(-6.0f, -6.0f, -6.0f),
+};
 
 Renderer::Renderer()
 {
@@ -47,10 +56,12 @@ Renderer::Renderer()
 	p_descriptor_state_ = std::make_unique<DescriptorState>(*p_device_);
 	p_cmd_pool_         = std::make_unique<CommandPool>(*p_device_, p_device_->get_graphics_queue(), p_physical_device_->get_graphics_queue_family_index());
 	p_swapchain_        = std::make_unique<Swapchain>(*p_device_, p_window_->get_extent());
-	load_scene("2.0/DamagedHelmet/glTF/DamagedHelmet.gltf");
-	create_pbr_resources();
+	load_scene("2.0/BoxTextured/glTF/HW.gltf");
+	PBRBaker baker(*p_device_);
+	baked_pbr_ = baker.bake();
 	create_rendering_resources();
 	p_sframe_buffer_ = std::make_unique<SwapchainFramebuffer>(*p_device_, *p_swapchain_, *p_render_pass_);
+	create_controller();
 }
 
 Renderer::~Renderer(){};
@@ -181,7 +192,8 @@ void Renderer::resize()
 {
 	vk::Extent2D extent = p_window_->wait_for_non_zero_extent();
 	p_device_->get_handle().waitIdle();
-	p_swapchain_->rebuild(p_window_->get_extent());
+	p_camera_node_->get_component<sg::Script>().resize(extent.width, extent.height);
+	p_swapchain_->rebuild(extent);
 	p_sframe_buffer_->rebuild();
 }
 
@@ -194,6 +206,7 @@ void Renderer::record_draw_commands(uint32_t img_idx)
 	set_dynamic_states(cmd_buf);
 	begin_render_pass(cmd_buf, p_sframe_buffer_->get_handle(img_idx));
 	draw_skybox(cmd_buf);
+	draw_lights(cmd_buf);
 	draw_scene(cmd_buf);
 	cmd_buf.get_handle().endRenderPass();
 	cmd_buf.get_handle().end();
@@ -201,15 +214,21 @@ void Renderer::record_draw_commands(uint32_t img_idx)
 
 void Renderer::update_frame_ubo()
 {
-	sg::Camera &camera      = p_camera_node_->get_component<sg::Camera>();
-	Buffer     &uniform_buf = get_current_frame_resource().uniform_buf;
+	sg::Camera &camera    = p_camera_node_->get_component<sg::Camera>();
+	glm::mat4   proj_view = camera.get_projection() * camera.get_view();
 
 	UBO ubo{
-	    .proj_view = camera.get_projection() * camera.get_view(),
-	    .cam_pos   = p_camera_node_->get_component<sg::Transform>().get_translation(),
+	    .proj_view = proj_view,
+	    .lights    = {
+            glm::vec4(LIGHT_POSITIONS[0], 1.0f),
+            glm::vec4(LIGHT_POSITIONS[1], 1.0f),
+            glm::vec4(LIGHT_POSITIONS[2], 1.0f),
+            glm::vec4(LIGHT_POSITIONS[3], 1.0f),
+        },
 	};
 
-	uniform_buf.update(&ubo, sizeof(ubo));
+	get_current_frame_resource().blinn_phong_uni_buf.update(&ubo, sizeof(ubo));
+	get_current_frame_resource().light_uni_buf.update(&proj_view, sizeof(proj_view));
 }
 
 void Renderer::set_dynamic_states(CommandBuffer &cmd_buf)
@@ -284,17 +303,39 @@ void Renderer::draw_skybox(CommandBuffer &cmd_buf)
 	draw_submesh(cmd_buf, *baked_pbr_.p_box);
 }        // namespace W3D
 
-void Renderer::draw_scene(CommandBuffer &cmd_buf)
+void Renderer::draw_lights(CommandBuffer &cmd_buf)
 {
-	vk::PipelineLayout pl_layout = pbr_.p_pl->get_pipeline_layout();
-	cmd_buf.get_handle().bindPipeline(
-	    vk::PipelineBindPoint::eGraphics,
-	    pbr_.p_pl->get_handle());
+	vk::PipelineLayout pl_layout = light_.p_pl->get_pipeline_layout();
+	cmd_buf.get_handle().bindPipeline(vk::PipelineBindPoint::eGraphics, light_.p_pl->get_handle());
 	cmd_buf.get_handle().bindDescriptorSets(
 	    vk::PipelineBindPoint::eGraphics,
-	    pbr_.p_pl->get_pipeline_layout(),
+	    pl_layout,
 	    0,
-	    get_current_frame_resource().pbr_set,
+	    get_current_frame_resource().light_set,
+	    {});
+
+	glm::mat4 scaled_m = glm::scale(glm::mat4(1.0f), glm::vec3(0.3f));
+	for (int i = 0; i < NUM_LIGHTS; i++)
+	{
+		glm::mat4 world_m = glm::translate(scaled_m, LIGHT_POSITIONS[i]);
+
+		cmd_buf.get_handle().pushConstants<glm::mat4>(pl_layout, vk::ShaderStageFlagBits::eVertex, 0, world_m);
+
+		draw_submesh(cmd_buf, *baked_pbr_.p_box);
+	}
+}
+
+void Renderer::draw_scene(CommandBuffer &cmd_buf)
+{
+	vk::PipelineLayout pl_layout = blinn_phong_.p_pl->get_pipeline_layout();
+	cmd_buf.get_handle().bindPipeline(
+	    vk::PipelineBindPoint::eGraphics,
+	    blinn_phong_.p_pl->get_handle());
+	cmd_buf.get_handle().bindDescriptorSets(
+	    vk::PipelineBindPoint::eGraphics,
+	    pl_layout,
+	    0,
+	    get_current_frame_resource().blinn_phong_set,
 	    {});
 
 	std::queue<sg::Node *> p_nodes;
@@ -326,20 +367,19 @@ void Renderer::draw_scene(CommandBuffer &cmd_buf)
 
 void Renderer::push_node_model_matrix(CommandBuffer &cmd_buf, sg::Node *p_node)
 {
-	glm::mat4 rotated_m = p_node->get_component<sg::Transform>().get_world_M();
-	rotated_m           = glm::rotate(rotated_m, 1.57f, glm::vec3(1.0f, 0.0f, 0.0f));
-	rotated_m           = glm::rotate(rotated_m, -1.57f, glm::vec3(0.0f, 1.0f, 0.0f));
-	PBRPCO pco          = {
-	             .model = rotated_m,
-    };
-	cmd_buf.get_handle().pushConstants<PBRPCO>(pbr_.p_pl->get_pipeline_layout(), vk::ShaderStageFlagBits::eVertex, 0, pco);
+	BlinnPhongPCO pco{
+	    .model        = p_node->get_component<sg::Transform>().get_world_M(),
+	    .cam_pos      = p_camera_node_->get_component<sg::Transform>().get_translation(),
+	    .is_colliding = p_controller_->are_players_colliding(),
+	};
+	cmd_buf.get_handle().pushConstants<BlinnPhongPCO>(blinn_phong_.p_pl->get_pipeline_layout(), vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment, 0, pco);
 }        // namespace W3D
 
 void Renderer::bind_material(CommandBuffer &cmd_buf, const sg::PBRMaterial &material)
 {
 	cmd_buf.get_handle().bindDescriptorSets(
 	    vk::PipelineBindPoint::eGraphics,
-	    pbr_.p_pl->get_pipeline_layout(),
+	    blinn_phong_.p_pl->get_pipeline_layout(),
 	    1,
 	    material.set,
 	    {});
@@ -365,28 +405,37 @@ void Renderer::process_event(const Event &event)
 	}
 	else
 	{
-		std::vector<sg::Script *> p_scripts = p_scene_->get_components<sg::Script>();
-		for (sg::Script *p_script : p_scripts)
-		{
-			p_script->process_event(event);
-		}
+		p_controller_->process_event(event);
 	}
 }
 
 void Renderer::load_scene(const char *scene_name)
 {
 	GLTFLoader loader(*p_device_);
-	p_scene_ = loader.read_scene_from_file(scene_name);
-
+	p_scene_                   = loader.read_scene_from_file(scene_name);
 	vk::Extent2D window_extent = p_window_->get_extent();
 	p_camera_node_             = add_free_camera_script(*p_scene_, "main_camera", window_extent.width, window_extent.height);
 	p_camera_node_->get_component<sg::Transform>().set_tranlsation(glm::vec3(0.0f, 0.0f, 5.0f));
 }
 
-void Renderer::create_pbr_resources()
+void Renderer::create_controller()
 {
-	PBRBaker baker(*p_device_);
-	baked_pbr_ = baker.bake();
+	p_controller_ = std::make_unique<Controller>(*p_camera_node_, add_player_script("player_1"), add_player_script("player_2"));
+};
+
+sg::Node &Renderer::add_player_script(const char *node_name)
+{
+	sg::Node *p_node = p_scene_->find_node(node_name);
+	if (!p_node)
+	{
+		LOGE("Cannot find node {}", node_name);
+		abort();
+	};
+
+	std::unique_ptr<sg::Player> p_script = std::make_unique<sg::Player>(*p_node);
+	p_scene_->add_component_to_node(std::move(p_script), *p_node);
+
+	return *p_node;
 }
 
 void Renderer::create_rendering_resources()
@@ -399,11 +448,13 @@ void Renderer::create_rendering_resources()
 
 void Renderer::create_frame_resources()
 {
+	const DeviceMemoryAllocator &allocator = p_device_->get_device_memory_allocator();
 	for (uint32_t i = 0; i < NUM_INFLIGHT_FRAMES; i++)
 	{
 		frame_resources_.push_back({
 		    .cmd_buf                   = std::move(p_cmd_pool_->allocate_command_buffer()),
-		    .uniform_buf               = std::move(p_device_->get_device_memory_allocator().allocate_uniform_buffer(sizeof(UBO))),
+		    .blinn_phong_uni_buf       = std::move(allocator.allocate_uniform_buffer(sizeof(UBO))),
+		    .light_uni_buf             = std::move(allocator.allocate_uniform_buffer(sizeof(glm::mat4))),
 		    .image_avaliable_semaphore = std::move(Semaphore(*p_device_)),
 		    .render_finished_semaphore = std::move(Semaphore(*p_device_)),
 		    .in_flight_fence           = std::move(Fence(*p_device_, vk::FenceCreateFlagBits::eSignaled)),
@@ -413,49 +464,47 @@ void Renderer::create_frame_resources()
 
 void Renderer::create_descriptor_resources()
 {
-	create_pbr_desc_resources();
 	create_skybox_desc_resources();
+	create_blinn_phong_desc_resources();
+	create_light_desc_resources();
 	create_materials_desc_resources();
 }
 
-void Renderer::create_pbr_desc_resources()
+void Renderer::create_blinn_phong_desc_resources()
 {
-	vk::DescriptorImageInfo irradiance{
-	    .sampler     = baked_pbr_.p_irradiance->sampler.get_handle(),
-	    .imageView   = baked_pbr_.p_irradiance->resource.get_view().get_handle(),
-	    .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
+	vk::DescriptorBufferInfo ubo_dinfo{
+	    .offset = 0,
+	    .range  = sizeof(UBO),
 	};
+	for (uint32_t i = 0; i < NUM_INFLIGHT_FRAMES; i++)
+	{
+		ubo_dinfo.buffer = frame_resources_[i].blinn_phong_uni_buf.get_handle();
 
-	vk::DescriptorImageInfo prefilter{
-	    .sampler     = baked_pbr_.p_prefilter->sampler.get_handle(),
-	    .imageView   = baked_pbr_.p_prefilter->resource.get_view().get_handle(),
-	    .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
-	};
+		DescriptorAllocation desc_allocation = DescriptorBuilder::begin(p_descriptor_state_->cache, p_descriptor_state_->allocator).bind_buffer(0, ubo_dinfo, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment).build();
 
-	vk::DescriptorImageInfo brdf_lut{
-	    .sampler     = baked_pbr_.p_brdf_lut->sampler.get_handle(),
-	    .imageView   = baked_pbr_.p_brdf_lut->resource.get_view().get_handle(),
-	    .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
+		blinn_phong_.desc_layout_ring[DescriptorRingAccessor::eGlobal] = desc_allocation.set_layout;
+		frame_resources_[i].blinn_phong_set                            = desc_allocation.set;
+	}
+};
+
+void Renderer::create_light_desc_resources()
+{
+	vk::DescriptorBufferInfo ubo_dinfo{
+	    .offset = 0,
+	    .range  = sizeof(glm::mat4),
 	};
 
 	for (uint32_t i = 0; i < NUM_INFLIGHT_FRAMES; i++)
 	{
-		vk::DescriptorBufferInfo ubo{
-		    .buffer = frame_resources_[i].uniform_buf.get_handle(),
-		    .offset = 0,
-		    .range  = sizeof(UBO),
-		};
+		ubo_dinfo.buffer = frame_resources_[i].light_uni_buf.get_handle();
 
-		DescriptorAllocation allocation =
+		DescriptorAllocation desc_allocation =
 		    DescriptorBuilder::begin(p_descriptor_state_->cache, p_descriptor_state_->allocator)
-		        .bind_buffer(0, ubo, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment)
-		        .bind_image(1, irradiance, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eFragment)
-		        .bind_image(2, prefilter, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eFragment)
-		        .bind_image(3, brdf_lut, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eFragment)
+		        .bind_buffer(0, ubo_dinfo, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eVertex)
 		        .build();
 
-		frame_resources_[i].pbr_set                            = allocation.set;
-		pbr_.desc_layout_ring[DescriptorRingAccessor::eGlobal] = allocation.set_layout;
+		light_.desc_layout_ring[DescriptorRingAccessor::eGlobal] = desc_allocation.set_layout;
+		frame_resources_[i].light_set                            = desc_allocation.set;
 	}
 }
 
@@ -518,8 +567,8 @@ void Renderer::create_materials_desc_resources()
 
 		DescriptorAllocation desc_allocation = builder.build();
 
-		p_material->set                                          = desc_allocation.set;
-		pbr_.desc_layout_ring[DescriptorRingAccessor::eMaterial] = desc_allocation.set_layout;
+		p_material->set                                                  = desc_allocation.set;
+		blinn_phong_.desc_layout_ring[DescriptorRingAccessor::eMaterial] = desc_allocation.set_layout;
 	}
 }
 
@@ -581,28 +630,46 @@ void Renderer::create_pipeline_resources()
 	    .inputRate = vk::VertexInputRate::eVertex,
 	};
 	GraphicsPipelineState pl_state{
-	    .vert_shader_name   = "pbr.vert.spv",
-	    .frag_shader_name   = "pbr.frag.spv",
+	    .vert_shader_name   = "blinn_phong.vert.spv",
+	    .frag_shader_name   = "blinn_phong.frag.spv",
 	    .vertex_input_state = {
 	        .attribute_descriptions = sg::Vertex::get_input_attr_descriptions(),
 	        .binding_descriptions   = binding_descriptions,
 	    },
 	};
 
-	std::array<vk::PushConstantRange, 1> pbr_push_const_ranges;
-	pbr_push_const_ranges[0] = {
-	    .stageFlags = vk::ShaderStageFlagBits::eVertex,
+	vk::PushConstantRange blinn_phong_push_const_range{
+	    .stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
 	    .offset     = 0,
-	    .size       = sizeof(PBRPCO),
-	};
-	vk::PipelineLayoutCreateInfo pbr_pl_layout_cinfo{
-	    .setLayoutCount         = 2,
-	    .pSetLayouts            = pbr_.desc_layout_ring.data(),
-	    .pushConstantRangeCount = to_u32(pbr_push_const_ranges.size()),
-	    .pPushConstantRanges    = pbr_push_const_ranges.data(),
+	    .size       = sizeof(BlinnPhongPCO),
 	};
 
-	pbr_.p_pl = std::make_unique<GraphicsPipeline>(*p_device_, *p_render_pass_, pl_state, pbr_pl_layout_cinfo);
+	vk::PipelineLayoutCreateInfo blinn_phong_pl_layout_cinfo{
+	    .setLayoutCount         = 2,
+	    .pSetLayouts            = blinn_phong_.desc_layout_ring.data(),
+	    .pushConstantRangeCount = 1,
+	    .pPushConstantRanges    = &blinn_phong_push_const_range,
+	};
+
+	blinn_phong_.p_pl = std::make_unique<GraphicsPipeline>(*p_device_, *p_render_pass_, pl_state, blinn_phong_pl_layout_cinfo);
+
+	pl_state.vert_shader_name = "lights.vert.spv";
+	pl_state.frag_shader_name = "lights.frag.spv";
+
+	vk::PushConstantRange light_push_const_range{
+	    .stageFlags = vk::ShaderStageFlagBits::eVertex,
+	    .offset     = 0,
+	    .size       = sizeof(glm::mat4),
+	};
+
+	vk::PipelineLayoutCreateInfo light_pl_layout_cinfo{
+	    .setLayoutCount         = 1,
+	    .pSetLayouts            = light_.desc_layout_ring.data(),
+	    .pushConstantRangeCount = 1,
+	    .pPushConstantRanges    = &light_push_const_range,
+	};
+
+	light_.p_pl = std::make_unique<GraphicsPipeline>(*p_device_, *p_render_pass_, pl_state, light_pl_layout_cinfo);
 
 	vk::PushConstantRange skybox_push_const_range{
 	    .stageFlags = vk::ShaderStageFlagBits::eVertex,

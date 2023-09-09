@@ -62,7 +62,7 @@ class GLTFLoader
 	                                            size_t                index) const;
 	std::unique_ptr<sg::Camera>      parse_camera(const tinygltf::Camera &gltf_camera) const;
 	std::unique_ptr<sg::Mesh>        parse_mesh(const tinygltf::Mesh &gltf_mesh) const;
-	std::unique_ptr<sg::SubMesh>     parse_submesh(const tinygltf::Primitive &gltf_submesh) const;
+	std::unique_ptr<sg::SubMesh>     parse_submesh(sg::Mesh *p_mesh, const tinygltf::Primitive &gltf_submesh) const;
 	std::unique_ptr<sg::PBRMaterial> parse_material(
 	    const tinygltf::Material &gltf_material) const;
 	std::unique_ptr<sg::Image>   parse_image(const tinygltf::Image &gltf_image);

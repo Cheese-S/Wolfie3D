@@ -28,6 +28,7 @@ class Swapchain;
 class RenderPass;
 class SwapchainFramebuffer;
 class PipelineResource;
+class Controller;
 
 struct DescriptorState;
 struct Event;
@@ -61,11 +62,13 @@ class Renderer
 		// 	rhs.skybox_set = nullptr;
 		// };
 		CommandBuffer     cmd_buf;
-		Buffer            uniform_buf;
+		Buffer            blinn_phong_uni_buf;
+		Buffer            light_uni_buf;
 		Semaphore         image_avaliable_semaphore;
 		Semaphore         render_finished_semaphore;
 		Fence             in_flight_fence;
-		vk::DescriptorSet pbr_set;
+		vk::DescriptorSet blinn_phong_set;
+		vk::DescriptorSet light_set;
 		vk::DescriptorSet skybox_set;
 	};
 
@@ -84,18 +87,20 @@ class Renderer
 	struct UBO
 	{
 		glm::mat4 proj_view;
-		glm::vec3 cam_pos;
+		glm::vec4 lights[4];
+	};
+
+	struct BlinnPhongPCO
+	{
+		glm::mat4 model;
+		alignas(16) glm::vec3 cam_pos;
+		bool is_colliding;
 	};
 
 	struct SkyboxPCO
 	{
 		glm::mat4 proj;
 		glm::mat4 view;
-	};
-
-	struct PBRPCO
-	{
-		glm::mat4 model;
 	};
 
 	void main_loop();
@@ -110,8 +115,9 @@ class Renderer
 	void update_frame_ubo();
 	void set_dynamic_states(CommandBuffer &cmd_buf);
 	void begin_render_pass(CommandBuffer &cmd_buf, vk::Framebuffer framebuffer);
-	void draw_scene(CommandBuffer &cmd_buf);
 	void draw_skybox(CommandBuffer &cmd_buf);
+	void draw_lights(CommandBuffer &cmd_buf);
+	void draw_scene(CommandBuffer &cmd_buf);
 	void draw_submesh(CommandBuffer &cmd_buf, sg::SubMesh &submesh);
 	void bind_material(CommandBuffer &cmd_buf, const sg::PBRMaterial &material);
 	void push_node_model_matrix(CommandBuffer &cmd_buf, sg::Node *p_node);
@@ -120,15 +126,18 @@ class Renderer
 	FrameResource &get_current_frame_resource();
 
 	void load_scene(const char *scene_name);
-	void create_pbr_resources();
+	void create_controller();
 	void create_rendering_resources();
 	void create_frame_resources();
 	void create_descriptor_resources();
 	void create_skybox_desc_resources();
-	void create_pbr_desc_resources();
+	void create_blinn_phong_desc_resources();
+	void create_light_desc_resources();
 	void create_materials_desc_resources();
 	void create_render_pass();
 	void create_pipeline_resources();
+
+	sg::Node &add_player_script(const char *node_name);
 
 	std::unique_ptr<Window>               p_window_;
 	std::unique_ptr<Instance>             p_instance_;
@@ -141,12 +150,14 @@ class Renderer
 	std::unique_ptr<CommandPool>          p_cmd_pool_;
 	std::unique_ptr<sg::Scene>            p_scene_;
 	sg::Node                             *p_camera_node_ = nullptr;
+	std::unique_ptr<Controller>           p_controller_;
 
 	Timer                      timer_;
 	uint32_t                   frame_idx_ = 0;
 	std::vector<FrameResource> frame_resources_;
 	PipelineResource           skybox_;
-	PipelineResource           pbr_;
+	PipelineResource           blinn_phong_;
+	PipelineResource           light_;
 	PBR                        baked_pbr_;
 	bool                       is_window_resized_ = false;
 };

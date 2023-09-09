@@ -19,11 +19,16 @@ enum class MouseButton
 
 enum class KeyCode
 {
+	eUnknown,
+
 	eW,
 	eS,
 	eA,
 	eD,
-	eUnknown
+
+	e1,
+	e2,
+	e3,
 };
 
 enum class KeyAction

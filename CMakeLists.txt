@@ -25,6 +25,8 @@ target_sources(${PROJECT_NAME} PRIVATE
     src/tiny_gltf.cpp
     src/pbr_baker.cpp
     src/pbr_baker.hpp
+    src/controller.cpp
+    src/controller.hpp
 
     src/common/cvar.cpp
     src/common/cvar.hpp
@@ -120,6 +122,8 @@ target_sources(${PROJECT_NAME} PRIVATE
     src/scene_graph/components/transform.hpp
     src/scene_graph/scripts/free_camera.cpp
     src/scene_graph/scripts/free_camera.hpp
+    src/scene_graph/scripts/player.cpp
+    src/scene_graph/scripts/player.hpp
 )
 
 set_target_properties(${PROJECT_NAME}

@@ -78,7 +78,7 @@ class DescriptorBuilder
 	static DescriptorBuilder begin(DescriptorLayoutCache &layout_cache,
 	                               DescriptorAllocator   &descriptor_allocator);
 	DescriptorBuilder       &bind_buffer(uint32_t binding, vk::DescriptorBufferInfo &buffer_info,
-	                                     vk::DescriptorType type, vk::ShaderStageFlags flasg);
+	                                     vk::DescriptorType type, vk::ShaderStageFlags flags);
 	DescriptorBuilder       &bind_image(uint32_t binding, vk::DescriptorImageInfo &image_info,
 	                                    vk::DescriptorType type, vk::ShaderStageFlags flags);
 	DescriptorAllocation     build();

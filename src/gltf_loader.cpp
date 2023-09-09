@@ -36,6 +36,11 @@ inline vk::Format             get_attr_format(const tinygltf::Model &model, uint
 inline std::vector<uint8_t>   get_attr_data(const tinygltf::Model &model, uint32_t accessor_id);
 inline std::vector<uint8_t>   convert_data_stride(const std::vector<uint8_t> &src, uint32_t src_stride, uint32_t dst_stride);
 
+const glm::vec3 DEFAULT_NORMAL = glm::vec3(0.0f);
+const glm::vec2 DEFAULT_UV     = glm::vec2(0.0f);
+const glm::vec4 DEFAULT_JOINT  = glm::vec4(0.0f);
+const glm::vec4 DEFAULT_WEIGHT = glm::vec4(0.0f);
+
 template <class T, class Y>
 struct TypeCast
 {
@@ -53,7 +58,7 @@ GLTFLoader::GLTFLoader(Device const &device) :
 std::unique_ptr<sg::SubMesh> GLTFLoader::read_model_from_file(const std::string &file_name, int mesh_idx)
 {
 	load_gltf_model(file_name);
-	return parse_submesh(gltf_model_.meshes[mesh_idx].primitives[0]);
+	return parse_submesh(nullptr, gltf_model_.meshes[mesh_idx].primitives[0]);
 }
 
 std::unique_ptr<sg::Scene> GLTFLoader::read_scene_from_file(const std::string &file_name,
@@ -483,7 +488,7 @@ void GLTFLoader::load_meshs()
 
 		for (const auto &primitive : gltf_mesh.primitives)
 		{
-			std::unique_ptr<sg::SubMesh> p_submesh = parse_submesh(primitive);
+			std::unique_ptr<sg::SubMesh> p_submesh = parse_submesh(p_mesh.get(), primitive);
 			if (primitive.material >= 0)
 			{
 				assert(primitive.material < p_materials.size());
@@ -506,11 +511,20 @@ std::unique_ptr<sg::Mesh> GLTFLoader::parse_mesh(const tinygltf::Mesh &gltf_mesh
 	return std::make_unique<sg::Mesh>(gltf_mesh.name);
 }
 
-std::unique_ptr<sg::SubMesh> GLTFLoader::parse_submesh(const tinygltf::Primitive &gltf_submesh) const
+std::unique_ptr<sg::SubMesh> GLTFLoader::parse_submesh(sg::Mesh *p_mesh, const tinygltf::Primitive &gltf_submesh) const
 {
 	std::vector<Buffer>          transient_bufs;
 	std::unique_ptr<sg::SubMesh> p_submesh = std::make_unique<sg::SubMesh>();
-	p_submesh->vertex_count_               = get_submesh_vertex_count(gltf_submesh);
+	// pos_accessor is guranteed to exist
+	const tinygltf::Accessor pos_accessor = gltf_model_.accessors[gltf_submesh.attributes.find("POSITION")->second];
+	p_submesh->vertex_count_              = pos_accessor.count;
+	if (p_mesh)
+	{
+		p_mesh->get_mut_bounds().update(
+		    glm::vec3(pos_accessor.minValues[0], pos_accessor.minValues[1], pos_accessor.minValues[2]),
+		    glm::vec3(pos_accessor.maxValues[0], pos_accessor.maxValues[1], pos_accessor.maxValues[2]));
+	}
+
 	std::vector<sg::Vertex> vertexs;
 	vertexs.reserve(p_submesh->vertex_count_);
 

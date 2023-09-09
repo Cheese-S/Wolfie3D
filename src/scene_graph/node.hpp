@@ -30,6 +30,7 @@ class Node
 	const std::string         &get_name() const;
 	Node                      *get_parent() const;
 	const std::vector<Node *> &get_children() const;
+	sg::Transform             &get_transform() const;
 	template <class T>
 	inline T &get_component()
 	{
