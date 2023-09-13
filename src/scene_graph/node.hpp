@@ -36,6 +36,7 @@ class Node
 		return dynamic_cast<T &>(get_component(typeid(T)));
 	}
 	Component &get_component(const std::type_index index);
+	Transform &get_transform();
 
   private:
 	size_t                                           id_;

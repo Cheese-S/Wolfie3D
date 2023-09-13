@@ -8,7 +8,9 @@
 #include "scene_graph/components/texture.hpp"
 #include "scene_graph/node.hpp"
 #include "scene_graph/scene.hpp"
+#include "scene_graph/scripts/arc_ball_camera.hpp"
 #include "scene_graph/scripts/free_camera.hpp"
+
 
 namespace W3D
 {
@@ -45,6 +47,28 @@ std::string to_snake_case(const std::string &text)
 sg::Node *add_free_camera_script(sg::Scene &scene, const std::string &node_name, int width,
                                  int height)
 {
+	sg::Node *p_node   = find_valid_camera_node(scene, node_name);
+	auto      p_script = std::make_unique<sg::FreeCamera>(*p_node);
+
+	p_script->resize(width, height);
+	scene.add_component_to_node(std::move(p_script), *p_node);
+
+	return p_node;
+}
+
+sg::Node *add_arc_ball_camera_script(sg::Scene &scene, const std::string &node_name, int width, int height)
+{
+	sg::Node                          *p_node   = find_valid_camera_node(scene, node_name);
+	std::unique_ptr<sg::ArcBallCamera> p_script = std::make_unique<sg::ArcBallCamera>(*p_node, scene.get_bound());
+
+	p_script->resize(width, height);
+	scene.add_component_to_node(std::move(p_script), *p_node);
+
+	return p_node;
+}
+
+sg::Node *find_valid_camera_node(sg::Scene &scene, const std::string &node_name)
+{
 	auto camera_node = scene.find_node(node_name);
 
 	if (!camera_node)
@@ -61,11 +85,6 @@ sg::Node *add_free_camera_script(sg::Scene &scene, const std::string &node_name,
 	{
 		throw std::runtime_error("No camera component found");
 	}
-
-	auto free_camera_script = std::make_unique<sg::FreeCamera>(*camera_node);
-
-	free_camera_script->resize(width, height);
-	scene.add_component_to_node(std::move(free_camera_script), *camera_node);
 
 	return camera_node;
 }

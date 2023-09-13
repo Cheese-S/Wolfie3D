@@ -26,6 +26,11 @@ const AABB &Mesh::get_bounds() const
 	return bounds_;
 }
 
+AABB &Mesh::get_mut_bounds()
+{
+	return bounds_;
+}
+
 const std::vector<SubMesh *> &Mesh::get_p_submeshs() const
 {
 	return p_submeshs;

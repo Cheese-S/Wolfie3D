@@ -13,12 +13,16 @@ class AABB : public Component
 	virtual std::type_index get_type() override;
 
 	void      update(const glm::vec3 &pt);
-	void      transform(glm::mat4 &T);
+	void      update(const glm::vec3 &min, const glm::vec3 &max);
+	void      update(const AABB &b);
+	AABB      transform(glm::mat4 T);
 	glm::vec3 get_scale() const;
 	glm::vec3 get_center() const;
 	glm::vec3 get_min() const;
 	glm::vec3 get_max() const;
 	void      reset();
+
+	std::string to_string() const;
 
   private:
 	glm::vec3 min_;

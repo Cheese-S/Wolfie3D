@@ -7,9 +7,9 @@
 namespace W3D::sg
 {
 
-std::array<vk::VertexInputAttributeDescription, 5> Vertex::get_input_attr_descriptions()
+std::array<vk::VertexInputAttributeDescription, 6> Vertex::get_input_attr_descriptions()
 {
-	std::array<vk::VertexInputAttributeDescription, 5> descriptions;
+	std::array<vk::VertexInputAttributeDescription, 6> descriptions;
 	descriptions[0] = {
 	    .location = 0,
 	    .binding  = 0,
@@ -39,6 +39,12 @@ std::array<vk::VertexInputAttributeDescription, 5> Vertex::get_input_attr_descri
 	    .binding  = 0,
 	    .format   = vk::Format::eR32G32B32A32Sfloat,
 	    .offset   = offsetof(Vertex, weight),
+	};
+	descriptions[5] = {
+	    .location = 5,
+	    .binding  = 0,
+	    .format   = vk::Format::eR32G32B32A32Sfloat,
+	    .offset   = offsetof(Vertex, color),
 	};
 	return descriptions;
 };

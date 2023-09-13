@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "common/glm_common.hpp"
+#include "scene_graph/components/aabb.hpp"
 #include "scene_graph/node.hpp"
 
 namespace W3D::sg
@@ -85,13 +86,15 @@ class Scene
 	{
 		return has_component(typeid(T));
 	}
-	bool has_component(const std::type_index &type) const;
-
-	Node &get_root_node();
+	bool                    has_component(const std::type_index &type) const;
+	Node                   &get_root_node();
+	std::vector<sg::Node *> get_nodes();
+	AABB                   &get_bound();
 
   private:
 	std::string name_;
 	Node       *root_ = nullptr;
+	AABB        bound_;
 
 	std::vector<std::unique_ptr<Node>>                                           p_nodes_;
 	std::unordered_map<std::type_index, std::vector<std::unique_ptr<Component>>> p_components_;

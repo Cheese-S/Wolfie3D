@@ -15,9 +15,9 @@ class FreeCamera : public NodeScript
 
 	FreeCamera(Node &node);
 	virtual ~FreeCamera() = default;
-	virtual void update(float delta_time) override;
-	virtual void process_event(const Event &input_event) override;
-	virtual void resize(uint32_t width, uint32_t height) override;
+	void update(float delta_time) override;
+	void process_event(const Event &input_event) override;
+	void resize(uint32_t width, uint32_t height) override;
 
   private:
 	float     speed_multiplier_ = 3.0f;

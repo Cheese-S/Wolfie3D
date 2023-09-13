@@ -57,8 +57,11 @@ inline std::string to_string(const T &value)
 
 std::string to_snake_case(const std::string &text);
 
-sg::Node *add_free_camera_script(sg::Scene &scene, const std::string &node_name, int width,
-                                 int height);
+sg::Node *add_free_camera_script(sg::Scene &scene, const std::string &node_name, int width, int height);
+
+sg::Node *add_arc_ball_camera_script(sg::Scene &scene, const std::string &node_name, int width, int height);
+
+sg::Node *find_valid_camera_node(sg::Scene &scene, const std::string &node_name);
 
 // FNV-1a 32bit hashing algorithm.
 constexpr uint32_t fnv1a_32(const char *s, std::size_t len)

@@ -59,6 +59,11 @@ Component &Node::get_component(const std::type_index index)
 	return *components_.at(index);
 };
 
+Transform &Node::get_transform()
+{
+	return T_;
+}
+
 bool Node::has_component(const std::type_index index)
 {
 	return components_.count(index) > 0;

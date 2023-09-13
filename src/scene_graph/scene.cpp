@@ -53,9 +53,25 @@ void Scene::set_nodes(std::vector<std::unique_ptr<Node>> &&nodes)
 	p_nodes_ = std::move(nodes);
 }
 
+std::vector<sg::Node *> Scene::get_nodes()
+{
+	std::vector<sg::Node *> res;
+	res.reserve(p_nodes_.size());
+	for (auto &p_node : p_nodes_)
+	{
+		res.push_back(p_node.get());
+	}
+	return res;
+}
+
 Node &Scene::get_root_node()
 {
 	return *root_;
+}
+
+AABB &Scene::get_bound()
+{
+	return bound_;
 }
 
 Node *Scene::find_node(const std::string &name)

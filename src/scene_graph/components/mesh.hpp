@@ -20,6 +20,7 @@ class Mesh : public Component
 
 	virtual std::type_index       get_type() override;
 	const AABB                   &get_bounds() const;
+	AABB                         &get_mut_bounds();
 	const std::vector<SubMesh *> &get_p_submeshs() const;
 	const std::vector<Node *>    &get_p_nodes() const;
 

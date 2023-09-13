@@ -26,6 +26,7 @@ class SubMesh;
 class PBRMaterial;
 class Sampler;
 class Texture;
+class AABB;
 struct Vertex;
 };        // namespace sg
 
@@ -62,7 +63,7 @@ class GLTFLoader
 	                                            size_t                index) const;
 	std::unique_ptr<sg::Camera>      parse_camera(const tinygltf::Camera &gltf_camera) const;
 	std::unique_ptr<sg::Mesh>        parse_mesh(const tinygltf::Mesh &gltf_mesh) const;
-	std::unique_ptr<sg::SubMesh>     parse_submesh(const tinygltf::Primitive &gltf_submesh) const;
+	std::unique_ptr<sg::SubMesh>     parse_submesh(sg::Mesh *p_mesh, const tinygltf::Primitive &gltf_submesh) const;
 	std::unique_ptr<sg::PBRMaterial> parse_material(
 	    const tinygltf::Material &gltf_material) const;
 	std::unique_ptr<sg::Image>   parse_image(const tinygltf::Image &gltf_image);
@@ -81,8 +82,10 @@ class GLTFLoader
 	void             create_image_resource(sg::Image &image, size_t idx) const;
 	void             append_textures_to_material(tinygltf::ParameterMap &parameter_map, std::vector<sg::Texture *> &p_textures, sg::PBRMaterial *p_material);
 	size_t           get_submesh_vertex_count(const tinygltf::Primitive &submesh) const;
+	void             update_parent_mesh_bound(sg::Mesh *p_mesh, const tinygltf::Primitive &gltf_submesh) const;
 	tinygltf::Scene *pick_scene(int scene_idx);
 	void             init_node_hierarchy(tinygltf::Scene *p_gltf_scene, std::vector<std::unique_ptr<sg::Node>> &p_nodes, sg::Node &root);
+	void             init_scene_bound();
 
 	template <typename T>
 	const T *get_attr_data_ptr(const tinygltf::Primitive &submesh, const char *name) const

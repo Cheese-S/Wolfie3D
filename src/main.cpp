@@ -5,14 +5,18 @@
 
 #include "core/renderer.hpp"
 
-int main() {
-    W3D::Renderer renderer;
-    try {
-        renderer.start();
-    } catch (const std::exception& e) {
-        std::cerr << e.what() << std::endl;
-        return EXIT_FAILURE;
-    }
+int main()
+{
+	W3D::Renderer renderer;
+	try
+	{
+		renderer.start();
+	}
+	catch (const std::exception &e)
+	{
+		std::cerr << e.what() << std::endl;
+		return EXIT_FAILURE;
+	}
 
-    return EXIT_SUCCESS;
+	return EXIT_SUCCESS;
 };

@@ -65,14 +65,15 @@ void FreeCamera::update(float delta_time)
 
 	if (delta_rotation != glm::vec3(0.0f) || delta_translation != glm::vec3(0.0f))
 	{
-		auto     &transform = get_node().get_component<Transform>();
+		auto     &transform = get_node().get_transform();
 		glm::quat qx        = glm::angleAxis(delta_rotation.x, glm::vec3(1.0f, 0.0f, 0.0f));
 		glm::quat qy        = glm::angleAxis(delta_rotation.y, glm::vec3(0.0f, 1.0f, 0.0f));
 
 		glm::quat orientation = glm::normalize(qy * transform.get_rotation() * qx);
 		transform.set_tranlsation(transform.get_translation() +
-		                          delta_translation * glm::conjugate(orientation));
+		                          orientation * delta_translation);
 		transform.set_rotation(orientation);
+		glm::inverse(orientation);
 	}
 
 	mouse_move_delta_ = {};

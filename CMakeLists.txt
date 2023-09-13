@@ -120,6 +120,8 @@ target_sources(${PROJECT_NAME} PRIVATE
     src/scene_graph/components/transform.hpp
     src/scene_graph/scripts/free_camera.cpp
     src/scene_graph/scripts/free_camera.hpp
+    src/scene_graph/scripts/arc_ball_camera.cpp
+    src/scene_graph/scripts/arc_ball_camera.hpp
 )
 
 set_target_properties(${PROJECT_NAME}

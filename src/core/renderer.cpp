@@ -1,5 +1,6 @@
 #include "renderer.hpp"
 
+#include <iostream>
 #include <queue>
 
 #include "gltf_loader.hpp"
@@ -47,7 +48,7 @@ Renderer::Renderer()
 	p_descriptor_state_ = std::make_unique<DescriptorState>(*p_device_);
 	p_cmd_pool_         = std::make_unique<CommandPool>(*p_device_, p_device_->get_graphics_queue(), p_physical_device_->get_graphics_queue_family_index());
 	p_swapchain_        = std::make_unique<Swapchain>(*p_device_, p_window_->get_extent());
-	load_scene("2.0/DamagedHelmet/glTF/DamagedHelmet.gltf");
+	load_scene("2.0/Fox/glTF/Fox.gltf");
 	create_pbr_resources();
 	create_rendering_resources();
 	p_sframe_buffer_ = std::make_unique<SwapchainFramebuffer>(*p_device_, *p_swapchain_, *p_render_pass_);
@@ -183,6 +184,7 @@ void Renderer::resize()
 	p_device_->get_handle().waitIdle();
 	p_swapchain_->rebuild(p_window_->get_extent());
 	p_sframe_buffer_->rebuild();
+	p_camera_node_->get_component<sg::Script>().resize(extent.width, extent.height);
 }
 
 void Renderer::record_draw_commands(uint32_t img_idx)
@@ -206,7 +208,7 @@ void Renderer::update_frame_ubo()
 
 	UBO ubo{
 	    .proj_view = camera.get_projection() * camera.get_view(),
-	    .cam_pos   = p_camera_node_->get_component<sg::Transform>().get_translation(),
+	    .cam_pos   = p_camera_node_->get_transform().get_translation(),
 	};
 
 	uniform_buf.update(&ubo, sizeof(ubo));
@@ -326,12 +328,11 @@ void Renderer::draw_scene(CommandBuffer &cmd_buf)
 
 void Renderer::push_node_model_matrix(CommandBuffer &cmd_buf, sg::Node *p_node)
 {
-	glm::mat4 rotated_m = p_node->get_component<sg::Transform>().get_world_M();
-	rotated_m           = glm::rotate(rotated_m, 1.57f, glm::vec3(1.0f, 0.0f, 0.0f));
-	rotated_m           = glm::rotate(rotated_m, -1.57f, glm::vec3(0.0f, 1.0f, 0.0f));
-	PBRPCO pco          = {
-	             .model = rotated_m,
-    };
+	glm::mat4 rotated_m = p_node->get_transform().get_world_M();
+	// rotated_m           = glm::scale(rotated_m, glm::vec3(0.5, 0.5, 0.5));
+	PBRPCO pco = {
+	    .model = rotated_m,
+	};
 	cmd_buf.get_handle().pushConstants<PBRPCO>(pbr_.p_pl->get_pipeline_layout(), vk::ShaderStageFlagBits::eVertex, 0, pco);
 }        // namespace W3D
 
@@ -348,8 +349,15 @@ void Renderer::bind_material(CommandBuffer &cmd_buf, const sg::PBRMaterial &mate
 void Renderer::draw_submesh(CommandBuffer &cmd_buf, sg::SubMesh &submesh)
 {
 	cmd_buf.get_handle().bindVertexBuffers(0, submesh.p_vertex_buf_->get_handle(), {0});
-	cmd_buf.get_handle().bindIndexBuffer(submesh.p_idx_buf_->get_handle(), 0, vk::IndexType::eUint32);
-	cmd_buf.get_handle().drawIndexed(submesh.idx_count_, 1, 0, 0, 0);
+	if (submesh.p_idx_buf_)
+	{
+		cmd_buf.get_handle().bindIndexBuffer(submesh.p_idx_buf_->get_handle(), 0, vk::IndexType::eUint32);
+		cmd_buf.get_handle().drawIndexed(submesh.idx_count_, 1, 0, 0, 0);
+	}
+	else
+	{
+		cmd_buf.get_handle().draw(submesh.vertex_count_, 1, 0, 0);
+	}
 }
 
 Renderer::FrameResource &Renderer::get_current_frame_resource()
@@ -379,8 +387,9 @@ void Renderer::load_scene(const char *scene_name)
 	p_scene_ = loader.read_scene_from_file(scene_name);
 
 	vk::Extent2D window_extent = p_window_->get_extent();
-	p_camera_node_             = add_free_camera_script(*p_scene_, "main_camera", window_extent.width, window_extent.height);
-	p_camera_node_->get_component<sg::Transform>().set_tranlsation(glm::vec3(0.0f, 0.0f, 5.0f));
+	p_camera_node_             = add_arc_ball_camera_script(*p_scene_, "main_camera", window_extent.width, window_extent.height);
+
+	std::cout << p_scene_->get_bound().to_string() << std::endl;
 }
 
 void Renderer::create_pbr_resources()

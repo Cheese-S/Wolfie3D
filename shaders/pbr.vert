@@ -11,14 +11,17 @@ layout(push_constant) uniform PCO {
 layout(location = 0) in vec3 position;
 layout(location = 1) in vec3 normal;
 layout(location = 2) in vec2 uv;
+layout(location = 5) in vec4 color; 
 
 layout(location = 0) out vec3 out_normal;
 layout(location = 1) out vec2 out_uv;
 layout(location = 2) out vec3 frag_uvw;
+layout(location = 5) out vec4 out_color;
 
 void main() {
     gl_Position = ubo.proj_view * pco.model * vec4(position, 1.0);
     frag_uvw = vec3(pco.model * vec4(position, 1.0));
     out_normal = normalize(transpose(inverse(mat3(pco.model))) * normal);
     out_uv = uv;
+    out_color = color;
 }

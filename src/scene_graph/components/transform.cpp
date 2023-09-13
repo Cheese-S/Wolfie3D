@@ -28,7 +28,7 @@ glm::mat4 Transform::get_world_M()
 
 	if (parent)
 	{
-		auto &transform = parent->get_component<Transform>();
+		auto &transform = parent->get_transform();
 		world_M_        = transform.get_world_M() * world_M_;
 	}
 	need_update_ = false;

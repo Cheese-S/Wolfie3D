@@ -13,6 +13,7 @@
 #include "core/instance.hpp"
 #include "core/physical_device.hpp"
 
+#include "scene_graph/components/aabb.hpp"
 #include "scene_graph/components/camera.hpp"
 #include "scene_graph/components/image.hpp"
 #include "scene_graph/components/mesh.hpp"
@@ -36,6 +37,12 @@ inline vk::Format             get_attr_format(const tinygltf::Model &model, uint
 inline std::vector<uint8_t>   get_attr_data(const tinygltf::Model &model, uint32_t accessor_id);
 inline std::vector<uint8_t>   convert_data_stride(const std::vector<uint8_t> &src, uint32_t src_stride, uint32_t dst_stride);
 
+const glm::vec3 DEFAULT_NORMAL = glm::vec3(0.0f);
+const glm::vec2 DEFAULT_UV     = glm::vec2(0.0f);
+const glm::vec4 DEFAULT_JOINT  = glm::vec4(0.0f);
+const glm::vec4 DEFAULT_WEIGHT = glm::vec4(0.0f);
+const glm::vec4 DEFAULT_COLOR  = glm::vec4(0.0f, 0.0f, 0.0f, 0.0f);
+
 template <class T, class Y>
 struct TypeCast
 {
@@ -53,7 +60,7 @@ GLTFLoader::GLTFLoader(Device const &device) :
 std::unique_ptr<sg::SubMesh> GLTFLoader::read_model_from_file(const std::string &file_name, int mesh_idx)
 {
 	load_gltf_model(file_name);
-	return parse_submesh(gltf_model_.meshes[mesh_idx].primitives[0]);
+	return parse_submesh(nullptr, gltf_model_.meshes[mesh_idx].primitives[0]);
 }
 
 std::unique_ptr<sg::Scene> GLTFLoader::read_scene_from_file(const std::string &file_name,
@@ -126,8 +133,24 @@ sg::Scene GLTFLoader::parse_scene(int scene_idx)
 	load_meshs();
 	load_nodes(scene_idx);
 	load_default_camera();
+	init_scene_bound();
 
 	return scene;
+}
+
+void GLTFLoader::init_scene_bound()
+{
+	std::vector<sg::Node *> p_nodes  = p_scene_->get_nodes();
+	sg::AABB               &scene_bd = p_scene_->get_bound();
+
+	for (sg::Node *p_node : p_nodes)
+	{
+		if (p_node->has_component<sg::Mesh>())
+		{
+			sg::Mesh &mesh = p_node->get_component<sg::Mesh>();
+			scene_bd.update(mesh.get_mut_bounds().transform(p_node->get_transform().get_world_M()));
+		}
+	};
 }
 
 void GLTFLoader::load_samplers() const
@@ -483,7 +506,7 @@ void GLTFLoader::load_meshs()
 
 		for (const auto &primitive : gltf_mesh.primitives)
 		{
-			std::unique_ptr<sg::SubMesh> p_submesh = parse_submesh(primitive);
+			std::unique_ptr<sg::SubMesh> p_submesh = parse_submesh(p_mesh.get(), primitive);
 			if (primitive.material >= 0)
 			{
 				assert(primitive.material < p_materials.size());
@@ -506,11 +529,15 @@ std::unique_ptr<sg::Mesh> GLTFLoader::parse_mesh(const tinygltf::Mesh &gltf_mesh
 	return std::make_unique<sg::Mesh>(gltf_mesh.name);
 }
 
-std::unique_ptr<sg::SubMesh> GLTFLoader::parse_submesh(const tinygltf::Primitive &gltf_submesh) const
+std::unique_ptr<sg::SubMesh> GLTFLoader::parse_submesh(sg::Mesh *p_mesh, const tinygltf::Primitive &gltf_submesh) const
 {
 	std::vector<Buffer>          transient_bufs;
 	std::unique_ptr<sg::SubMesh> p_submesh = std::make_unique<sg::SubMesh>();
 	p_submesh->vertex_count_               = get_submesh_vertex_count(gltf_submesh);
+	if (p_mesh)
+	{
+		update_parent_mesh_bound(p_mesh, gltf_submesh);
+	}
 	std::vector<sg::Vertex> vertexs;
 	vertexs.reserve(p_submesh->vertex_count_);
 
@@ -519,6 +546,7 @@ std::unique_ptr<sg::SubMesh> GLTFLoader::parse_submesh(const tinygltf::Primitive
 	const float    *p_uv     = get_attr_data_ptr<float>(gltf_submesh, "TEXCOORD_0");
 	const uint16_t *p_joint  = get_attr_data_ptr<uint16_t>(gltf_submesh, "JOINTS_0");
 	const float    *p_weight = get_attr_data_ptr<float>(gltf_submesh, "WEIGHTS_0");
+	const float    *p_color  = get_attr_data_ptr<float>(gltf_submesh, "COLOR_0");
 
 	bool is_skinned = p_joint && p_weight;
 
@@ -526,10 +554,11 @@ std::unique_ptr<sg::SubMesh> GLTFLoader::parse_submesh(const tinygltf::Primitive
 	{
 		vertexs.emplace_back(sg::Vertex{
 		    .pos    = glm::make_vec3(&p_pos[i * 3]),
-		    .norm   = p_norm ? glm::normalize(glm::make_vec3(&p_norm[i * 3])) : glm::vec3(0.0f),
-		    .uv     = p_uv ? glm::make_vec2(&p_uv[i * 2]) : glm::vec2(0.0f),
-		    .joint  = is_skinned ? glm::vec4(glm::make_vec4(&p_joint[i * 4])) : glm::vec4(0.0f),
-		    .weight = is_skinned ? glm::make_vec4(&p_weight[i * 4]) : glm::vec4(0.0f),
+		    .norm   = p_norm ? glm::normalize(glm::make_vec3(&p_norm[i * 3])) : DEFAULT_NORMAL,
+		    .uv     = p_uv ? glm::make_vec2(&p_uv[i * 2]) : DEFAULT_UV,
+		    .joint  = is_skinned ? glm::vec4(glm::make_vec4(&p_joint[i * 4])) : DEFAULT_JOINT,
+		    .weight = is_skinned ? glm::make_vec4(&p_weight[i * 4]) : DEFAULT_WEIGHT,
+		    .color  = p_color ? glm::make_vec4(&p_color[i * 4]) : DEFAULT_COLOR,
 		});
 	}
 
@@ -586,6 +615,14 @@ size_t GLTFLoader::get_submesh_vertex_count(const tinygltf::Primitive &submesh) 
 	// GLTF gurantees that a vertex will always have position attribute
 	const tinygltf::Accessor accessor = gltf_model_.accessors[submesh.attributes.find("POSITION")->second];
 	return accessor.count;
+}
+
+void GLTFLoader::update_parent_mesh_bound(sg::Mesh *p_mesh, const tinygltf::Primitive &submesh) const
+{
+	const tinygltf::Accessor accessor = gltf_model_.accessors[submesh.attributes.find("POSITION")->second];
+	p_mesh->get_mut_bounds().update(
+	    glm::vec3(accessor.minValues[0], accessor.minValues[1], accessor.minValues[2]),
+	    glm::vec3(accessor.maxValues[0], accessor.maxValues[1], accessor.maxValues[2]));
 }
 
 void GLTFLoader::load_cameras()
@@ -661,43 +698,6 @@ void GLTFLoader::load_nodes(int scene_idx)
 	p_scene_->set_nodes(std::move(p_nodes));
 }
 
-void GLTFLoader::init_node_hierarchy(tinygltf::Scene *p_gltf_scene, std::vector<std::unique_ptr<sg::Node>> &p_nodes, sg::Node &root)
-{
-	struct NodeTraversal
-	{
-		sg::Node &parent;
-		int       curr_idx;
-	};
-
-	std::queue<NodeTraversal> q;
-
-	for (int i : p_gltf_scene->nodes)
-	{
-		q.push({
-		    .parent   = std::ref(root),
-		    .curr_idx = i,
-		});
-	}
-
-	while (!q.empty())
-	{
-		NodeTraversal traversal = q.front();
-		q.pop();
-		assert(traversal.curr_idx < p_nodes.size());
-		sg::Node &curr = *p_nodes[traversal.curr_idx];
-		traversal.parent.add_child(curr);
-		curr.set_parent(traversal.parent);
-
-		for (int child_idx : gltf_model_.nodes[traversal.curr_idx].children)
-		{
-			q.push({
-			    .parent   = std::ref(curr),
-			    .curr_idx = child_idx,
-			});
-		}
-	}
-}
-
 std::vector<std::unique_ptr<sg::Node>> GLTFLoader::parse_nodes()
 {
 	std::vector<sg::Camera *>              p_cameras = p_scene_->get_components<sg::Camera>();
@@ -736,7 +736,7 @@ std::unique_ptr<sg::Node> GLTFLoader::parse_node(const tinygltf::Node &gltf_node
 {
 	auto node = std::make_unique<sg::Node>(index, gltf_node.name);
 
-	auto &transform = node->get_component<sg::Transform>();
+	auto &transform = node->get_transform();
 
 	if (!gltf_node.translation.empty())
 	{
@@ -767,6 +767,43 @@ std::unique_ptr<sg::Node> GLTFLoader::parse_node(const tinygltf::Node &gltf_node
 	}
 
 	return node;
+}
+
+void GLTFLoader::init_node_hierarchy(tinygltf::Scene *p_gltf_scene, std::vector<std::unique_ptr<sg::Node>> &p_nodes, sg::Node &root)
+{
+	struct NodeTraversal
+	{
+		sg::Node &parent;
+		int       curr_idx;
+	};
+
+	std::queue<NodeTraversal> q;
+
+	for (int i : p_gltf_scene->nodes)
+	{
+		q.push({
+		    .parent   = std::ref(root),
+		    .curr_idx = i,
+		});
+	}
+
+	while (!q.empty())
+	{
+		NodeTraversal traversal = q.front();
+		q.pop();
+		assert(traversal.curr_idx < p_nodes.size());
+		sg::Node &curr = *p_nodes[traversal.curr_idx];
+		traversal.parent.add_child(curr);
+		curr.set_parent(traversal.parent);
+
+		for (int child_idx : gltf_model_.nodes[traversal.curr_idx].children)
+		{
+			q.push({
+			    .parent   = std::ref(curr),
+			    .curr_idx = child_idx,
+			});
+		}
+	}
 }
 
 tinygltf::Scene *GLTFLoader::pick_scene(int scene_idx)

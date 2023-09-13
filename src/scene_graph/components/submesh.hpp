@@ -23,8 +23,9 @@ struct Vertex
 	glm::vec2 uv;
 	glm::vec4 joint;
 	glm::vec4 weight;
+	glm::vec4 color;
 
-	static std::array<vk::VertexInputAttributeDescription, 5> get_input_attr_descriptions();
+	static std::array<vk::VertexInputAttributeDescription, 6> get_input_attr_descriptions();
 };
 
 class Material;

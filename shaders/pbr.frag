@@ -3,6 +3,7 @@
 layout(location = 0) in vec3 in_normal;
 layout(location = 1) in vec2 in_uv;
 layout(location = 2) in vec3 frag_uvw;
+layout(location  = 5) in vec4 in_color;
 
 
 layout(set = 0, binding = 0) uniform UBO {
@@ -122,6 +123,7 @@ void main() {
 
     vec3 F0 = vec3(0.04);
     F0 = mix(F0, texture(color_sampler, in_uv).rgb, metallic);
+    // F0 = mix(F0, in_color.rgb, metallic);
 
     vec3 light_pos = vec3(5.0, 5.0, 5.0);
     vec3 L = normalize(light_pos - frag_uvw);
@@ -145,17 +147,18 @@ void main() {
 
 
     // Optional shading 
-    float ao = texture(ao_sampler, in_uv).r;
-    color = mix(color, color * ao, OCCLUSION_STRENGTH);
+    // float ao = texture(ao_sampler, in_uv).r;
+    // color = mix(color, color * ao, OCCLUSION_STRENGTH);
 
     // Optional Emissive
-    vec3 emissive = texture(emission_sampler, in_uv).rgb;
-    color += emissive;
+    // vec3 emissive = texture(emission_sampler, in_uv).rgb;
+    // color += emissive;
 
 
     color = color / (color + vec3(1.0));
 
     color = pow(color, vec3(1.0 / 2.2));
 
-    out_color = vec4(color, 1.0);
+    out_color = vec4(texture(color_sampler, in_uv).rgb, 1.0);
+
 }
