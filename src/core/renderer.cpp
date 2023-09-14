@@ -32,6 +32,7 @@
 #include "scene_graph/components/texture.hpp"
 #include "scene_graph/scene.hpp"
 #include "scene_graph/script.hpp"
+#include "scene_graph/scripts/animation.hpp"
 
 namespace W3D
 {
@@ -48,7 +49,7 @@ Renderer::Renderer()
 	p_descriptor_state_ = std::make_unique<DescriptorState>(*p_device_);
 	p_cmd_pool_         = std::make_unique<CommandPool>(*p_device_, p_device_->get_graphics_queue(), p_physical_device_->get_graphics_queue_family_index());
 	p_swapchain_        = std::make_unique<Swapchain>(*p_device_, p_window_->get_extent());
-	load_scene("2.0/Fox/glTF/Fox.gltf");
+	load_scene("2.0/AnimatedCube/glTF/AnimatedCube.gltf");
 	create_pbr_resources();
 	create_rendering_resources();
 	p_sframe_buffer_ = std::make_unique<SwapchainFramebuffer>(*p_device_, *p_swapchain_, *p_render_pass_);
@@ -77,13 +78,8 @@ void Renderer::main_loop()
 void Renderer::update()
 {
 	double delta_time = timer_.tick();
-
-	std::vector<sg::Script *> p_scripts = p_scene_->get_components<sg::Script>();
-
-	for (sg::Script *p_script : p_scripts)
-	{
-		p_script->update(delta_time);
-	}
+	p_camera_node_->get_component<sg::Script>().update(delta_time);
+	p_scene_->find_component<sg::Animation>("animation_AnimatedCube")->update(delta_time);
 }
 
 void Renderer::render_frame()

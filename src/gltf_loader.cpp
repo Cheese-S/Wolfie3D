@@ -25,6 +25,7 @@
 #include "scene_graph/components/transform.hpp"
 #include "scene_graph/node.hpp"
 #include "scene_graph/scene.hpp"
+#include "scene_graph/scripts/animation.hpp"
 
 namespace W3D
 {
@@ -33,6 +34,8 @@ inline vk::Filter             to_vk_min_filter(int min_filter);
 inline vk::Filter             to_vk_mag_filter(int mag_filter);
 inline vk::SamplerMipmapMode  to_vk_mipmap_mode(int mipmap_mode);
 inline vk::SamplerAddressMode to_vk_wrap_mode(int wrap_mode);
+inline sg::AnimationType      to_sg_animation_type(const std::string &interpolation);
+inline sg::AnimationTarget    to_sg_animation_target(const std::string &target);
 inline vk::Format             get_attr_format(const tinygltf::Model &model, uint32_t accessor_id);
 inline std::vector<uint8_t>   get_attr_data(const tinygltf::Model &model, uint32_t accessor_id);
 inline std::vector<uint8_t>   convert_data_stride(const std::vector<uint8_t> &src, uint32_t src_stride, uint32_t dst_stride);
@@ -132,9 +135,10 @@ sg::Scene GLTFLoader::parse_scene(int scene_idx)
 	batch_upload_images();
 	load_meshs();
 	load_nodes(scene_idx);
+	load_cameras();
 	load_default_camera();
+	load_animations();
 	init_scene_bound();
-
 	return scene;
 }
 
@@ -806,6 +810,102 @@ void GLTFLoader::init_node_hierarchy(tinygltf::Scene *p_gltf_scene, std::vector<
 	}
 }
 
+void GLTFLoader::load_animations()
+{
+	std::vector<sg::Node *>                     p_nodes = p_scene_->get_nodes();
+	std::vector<std::unique_ptr<sg::Animation>> p_animations;
+	p_animations.reserve(gltf_model_.animations.size());
+	for (size_t i = 0; i < gltf_model_.animations.size(); i++)
+	{
+		const tinygltf::Animation     &gltf_animation = gltf_model_.animations[i];
+		std::unique_ptr<sg::Animation> p_animation    = std::make_unique<sg::Animation>(gltf_animation.name);
+		p_animation->set_channels(parse_animation_channels(gltf_animation, p_nodes));
+		p_animation->update_interval();
+		p_animations.push_back(std::move(p_animation));
+	}
+	p_scene_->set_components(std::move(p_animations));
+}
+
+std::vector<sg::AnimationSampler> GLTFLoader::parse_animation_samplers(const tinygltf::Animation &gltf_animation)
+{
+	std::vector<sg::AnimationSampler> samplers;
+	samplers.resize(gltf_animation.samplers.size());
+
+	for (size_t i = 0; i < gltf_animation.samplers.size(); i++)
+	{
+		auto                 &gltf_sampler = gltf_animation.samplers[i];
+		sg::AnimationSampler &sampler      = samplers[i];
+		sampler.type                       = to_sg_animation_type(gltf_sampler.interpolation);
+		parse_animation_input_data(gltf_sampler, sampler);
+		parse_animation_output_data(gltf_sampler, sampler);
+	}
+
+	return samplers;
+}
+
+void GLTFLoader::parse_animation_input_data(const tinygltf::AnimationSampler &gltf_sampler, sg::AnimationSampler &sampler)
+{
+	tinygltf::Accessor  &input_accessor = gltf_model_.accessors[gltf_sampler.input];
+	std::vector<uint8_t> input_data     = get_attr_data(gltf_model_, gltf_sampler.input);
+	const float         *p_input_data   = reinterpret_cast<const float *>(input_data.data());
+	for (size_t i = 0; i < input_accessor.count; i++)
+	{
+		sampler.inputs.push_back(p_input_data[i]);
+	}
+}
+
+void GLTFLoader::parse_animation_output_data(const tinygltf::AnimationSampler &gltf_sampler, sg::AnimationSampler &sampler)
+{
+	tinygltf::Accessor  &output_accessor = gltf_model_.accessors[gltf_sampler.output];
+	std::vector<uint8_t> output_data     = get_attr_data(gltf_model_, gltf_sampler.output);
+	switch (output_accessor.type)
+	{
+		case TINYGLTF_TYPE_VEC3:
+		{
+			const glm::vec3 *p_output_data = reinterpret_cast<const glm::vec3 *>(output_data.data());
+			for (size_t i = 0; i < output_accessor.count; i++)
+			{
+				sampler.outputs.push_back(glm::vec4(p_output_data[i], 0.0f));
+			}
+			break;
+		}
+		case TINYGLTF_TYPE_VEC4:
+		{
+			const glm::vec4 *p_output_data = reinterpret_cast<const glm::vec4 *>(output_data.data());
+			for (size_t i = 0; i < output_accessor.count; i++)
+			{
+				sampler.outputs.push_back(p_output_data[i]);
+			}
+			break;
+		}
+		default:
+		{
+			LOGE("Unsupported output data type.");
+			abort();
+			break;
+		}
+	}
+}
+
+std::vector<sg::AnimationChannel> GLTFLoader::parse_animation_channels(const tinygltf::Animation &gltf_animation, std::vector<sg::Node *> p_nodes)
+{
+	std::vector<sg::AnimationSampler> samplers = parse_animation_samplers(gltf_animation);
+	std::vector<sg::AnimationChannel> channels;
+	channels.reserve(gltf_animation.channels.size());
+
+	for (size_t i = 0; i < gltf_animation.channels.size(); i++)
+	{
+		const tinygltf::AnimationChannel &gltf_channel = gltf_animation.channels[i];
+		channels.push_back(sg::AnimationChannel{
+		    .node    = *p_nodes[gltf_channel.target_node],
+		    .target  = to_sg_animation_target(gltf_channel.target_path),
+		    .sampler = samplers[gltf_channel.sampler],
+		});
+	}
+
+	return channels;
+}
+
 tinygltf::Scene *GLTFLoader::pick_scene(int scene_idx)
 {
 	tinygltf::Scene *gltf_scene  = nullptr;
@@ -891,6 +991,42 @@ inline vk::SamplerAddressMode to_vk_wrap_mode(int wrap_mode)
 		default:
 			return vk::SamplerAddressMode::eRepeat;
 	}
+}
+
+inline sg::AnimationType to_sg_animation_type(const std::string &interpolation)
+{
+	if (interpolation == "LINEAR")
+	{
+		return sg::AnimationType::eLinear;
+	}
+	else if (interpolation == "STEP")
+	{
+		return sg::AnimationType::eStep;
+	}
+	else if (interpolation == "CUBICSPLINE")
+	{
+		return sg::AnimationType::eCubicSpline;
+	}
+	LOGW("Unkown interpolation value {}.", interpolation);
+	return sg::AnimationType::eLinear;
+}
+
+inline sg::AnimationTarget to_sg_animation_target(const std::string &target)
+{
+	if (target == "translation")
+	{
+		return sg::AnimationTarget::eTranslation;
+	}
+	else if (target == "rotation")
+	{
+		return sg::AnimationTarget::eRotation;
+	}
+	else if (target == "scale")
+	{
+		return sg::AnimationTarget::eScale;
+	}
+	LOGW("Animation target {} is not supported!", target);
+	return sg::AnimationTarget::eTranslation;
 }
 
 inline vk::Format get_attr_format(const tinygltf::Model &model, uint32_t accessor_id)
