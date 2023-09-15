@@ -16,15 +16,6 @@
 
 #include "scene_graph/components/submesh.hpp"
 
-#include "renderdoc_app.h"
-
-W3D_DISABLE_WARNINGS()
-#include <libloaderapi.h>
-#include <minwindef.h>
-W3D_ENABLE_WARNINGS()
-
-RENDERDOC_API_1_1_2 *rdoc_api = nullptr;
-
 namespace W3D
 {
 
@@ -59,13 +50,6 @@ PBRBaker::PBRBaker(Device &device) :
     device_(device),
     desc_state_(device)
 {
-	if (HMODULE mod = GetModuleHandleA("renderdoc.dll"))
-	{
-		pRENDERDOC_GetAPI RENDERDOC_GetAPI =
-		    (pRENDERDOC_GetAPI) GetProcAddress(mod, "RENDERDOC_GetAPI");
-		int ret = RENDERDOC_GetAPI(eRENDERDOC_API_Version_1_1_2, (void **) &rdoc_api);
-		assert(ret == 1);
-	}
 	load_cube_model();
 	load_background();
 }
@@ -119,11 +103,6 @@ void PBRBaker::prepare_irradiance()
 	    .levels = max_mip_levels(IRRADIANCE_DIMENSION, IRRADIANCE_DIMENSION),
 	};
 	result_.p_irradiance = create_empty_cube_texture(cube_meta);
-	if (rdoc_api)
-		rdoc_api->StartFrameCapture(NULL, NULL);
-	bake_irradiance(cube_meta);
-	if (rdoc_api)
-		rdoc_api->EndFrameCapture(NULL, NULL);
 };
 
 void PBRBaker::bake_irradiance(ImageMetaInfo &cube_meta)
@@ -247,11 +226,6 @@ void PBRBaker::prepare_prefilter()
 	    .levels = max_mip_levels(PREFILTER_DIMENSION, PREFILTER_DIMENSION),
 	};
 	result_.p_prefilter = create_empty_cube_texture(cube_meta);
-	if (rdoc_api)
-		rdoc_api->StartFrameCapture(NULL, NULL);
-	bake_prefilter(cube_meta);
-	if (rdoc_api)
-		rdoc_api->EndFrameCapture(NULL, NULL);
 }
 
 void PBRBaker::bake_prefilter(ImageMetaInfo &cube_meta)
@@ -371,11 +345,6 @@ void PBRBaker::bake_prefilter(ImageMetaInfo &cube_meta)
 void PBRBaker::prepare_brdf_lut()
 {
 	create_brdf_lut_texture();
-	if (rdoc_api)
-		rdoc_api->StartFrameCapture(NULL, NULL);
-	bake_brdf_lut();
-	if (rdoc_api)
-		rdoc_api->EndFrameCapture(NULL, NULL);
 }
 
 void PBRBaker::create_brdf_lut_texture()
