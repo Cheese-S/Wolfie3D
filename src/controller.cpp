@@ -8,6 +8,8 @@
 
 namespace W3D
 {
+// Class that is responsible for dispatching events and answering collision queries
+
 Controller::Controller(sg::Node &camera_node, sg::Node &player_1_node, sg::Node &player_2_node) :
     camera_(camera_node),
     player_1(player_1_node),
@@ -29,6 +31,8 @@ void Controller::process_event(const Event &event)
 
 	deliver_event(event);
 }
+
+// Deliver events to *only* those who needs it.
 
 void Controller::deliver_event(const Event &event)
 {

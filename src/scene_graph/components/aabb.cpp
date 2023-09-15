@@ -37,6 +37,7 @@ void AABB::update(const AABB &other)
 }
 // AABB Transform algorithm by Jim Arvo
 // See https://www.realtimerendering.com/resources/GraphicsGems/gems/TransBox.c
+// Returns a new AABB that encloses the transformed AABB
 AABB AABB::transform(glm::mat4 &T) const
 {
 	float     a, b;

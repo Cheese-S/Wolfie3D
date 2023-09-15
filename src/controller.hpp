@@ -10,6 +10,7 @@ class Node;
 
 }
 
+// Enum that represents which node the user is currently controlling.
 enum class ControllerMode
 {
 	eCamera,

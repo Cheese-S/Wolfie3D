@@ -10,10 +10,12 @@ Player::Player(Node &node) :
 {
 }
 
+// This method is called every frame. Responsible for updating a node's state
 void Player::update(float delta_time)
 {
 	glm::vec3 delta_translation(0.0f, 0.0f, 0.0f);
 
+	// Caveat: The models are rotated! Therefore, we translate the objects in model space in z-direction
 	if (key_pressed_[KeyCode::eW])
 	{
 		delta_translation.z += TRANSLATION_MOVE_STEP;

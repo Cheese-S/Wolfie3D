@@ -8,6 +8,8 @@
 namespace W3D::sg
 {
 class Node;
+
+// Class that represents a typical TRS transform
 class Transform : public Component
 {
   public:
@@ -15,8 +17,12 @@ class Transform : public Component
 	virtual ~Transform() = default;
 	virtual std::type_index get_type() override;
 
+	// returns a model-to-world matrix
 	glm::mat4 get_world_M();
+
+	// returns only the node's transformation matrix (without considering its parent nods)
 	glm::mat4 get_local_M();
+
 	glm::quat get_rotation();
 	glm::vec3 get_translation();
 	glm::vec3 get_scale();

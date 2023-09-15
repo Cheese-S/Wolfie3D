@@ -21,10 +21,12 @@ layout(set = 1, binding = 0) uniform sampler2D color_map;
 layout(location = 0) out vec4 out_color;
 
 void main() {
+    // read color from texure
     vec3 color = texture(color_map, in_uv).rgb;
     if (pco.is_colliding > 0) {
         color = vec3(1.0f, 0.0f, 0.0f);
     }
+
     vec3 N = normalize(in_normal);
     vec3 V = normalize(pco.cam_pos.xyz - in_position);
     vec3 light_contribtion = 0.15 * color; // ambient
@@ -32,7 +34,6 @@ void main() {
         vec3 L = normalize(ubo.lights[i].xyz - in_position);
         vec3 diffuse = max(dot(L, N), 0.0) * LIGHT_COLOR;
 
-        vec3 R = reflect(-L, N);
         vec3 H = normalize(L + V);
         vec3 specular = pow(max(dot(N, H), 0.0), 64) * LIGHT_COLOR;
 
@@ -43,10 +44,8 @@ void main() {
         light_contribtion += (diffuse + specular) * attenuation;
     }
 
-    
-
     color = color * light_contribtion;
+    // Gamma correction
     color = pow(color, vec3(1.0 / 2.2));
     out_color = vec4(color, 1.0f);
-
 }
