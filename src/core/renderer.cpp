@@ -314,7 +314,7 @@ void Renderer::draw_lights(CommandBuffer &cmd_buf)
 	    get_current_frame_resource().light_set,
 	    {});
 
-	glm::mat4 scaled_m = glm::scale(glm::mat4(1.0f), glm::vec3(0.5f));
+	glm::mat4 scaled_m = glm::scale(glm::mat4(1.0f), glm::vec3(0.3f));
 	for (int i = 0; i < NUM_LIGHTS; i++)
 	{
 		glm::mat4 world_m = glm::translate(scaled_m, LIGHT_POSITIONS[i]);
