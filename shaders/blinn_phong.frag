@@ -9,8 +9,8 @@ layout(location = 2) in vec2 in_uv;
 
 layout(push_constant) uniform PCO {
     layout(offset = 64) vec3 cam_pos;
-    bool is_colliding;
-};
+    layout(offset = 80) int is_colliding;
+} pco;
 
 layout(set = 0, binding = 0) uniform UBO {
     layout(offset = 64) vec4 lights[NUM_LIGHTS];
@@ -22,11 +22,11 @@ layout(location = 0) out vec4 out_color;
 
 void main() {
     vec3 color = texture(color_map, in_uv).rgb;
-    if (is_colliding) {
+    if (pco.is_colliding > 0) {
         color = vec3(1.0f, 0.0f, 0.0f);
     }
     vec3 N = normalize(in_normal);
-    vec3 V = normalize(cam_pos - in_position);
+    vec3 V = normalize(pco.cam_pos.xyz - in_position);
     vec3 light_contribtion = 0.15 * color; // ambient
     for (int i = 0; i < NUM_LIGHTS; i++) {
         vec3 L = normalize(ubo.lights[i].xyz - in_position);

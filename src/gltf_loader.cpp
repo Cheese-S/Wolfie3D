@@ -688,7 +688,7 @@ void GLTFLoader::init_node_hierarchy(tinygltf::Scene *p_gltf_scene, std::vector<
 	for (int i : p_gltf_scene->nodes)
 	{
 		q.push({
-		    .parent   = std::ref(root),
+		    .parent   = root,
 		    .curr_idx = i,
 		});
 	}
@@ -705,7 +705,7 @@ void GLTFLoader::init_node_hierarchy(tinygltf::Scene *p_gltf_scene, std::vector<
 		for (int child_idx : gltf_model_.nodes[traversal.curr_idx].children)
 		{
 			q.push({
-			    .parent   = std::ref(curr),
+			    .parent   = curr,
 			    .curr_idx = child_idx,
 			});
 		}

@@ -94,7 +94,7 @@ class Renderer
 	{
 		glm::mat4 model;
 		alignas(16) glm::vec3 cam_pos;
-		bool is_colliding;
+		alignas(16) int is_colliding;
 	};
 
 	struct SkyboxPCO

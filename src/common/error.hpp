@@ -35,7 +35,7 @@
 		VkResult err = x;                                 \
 		if (err)                                          \
 		{                                                 \
-			LOGE("[VULKAN ERROR]: " + W3D::to_string(x)); \
+			LOGE("[VULKAN ERROR]: ", x); \
 			abort();                                      \
 		}                                                 \
 	} while (0)
