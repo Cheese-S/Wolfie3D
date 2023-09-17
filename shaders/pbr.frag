@@ -11,9 +11,9 @@ layout(set = 0, binding = 0) uniform UBO {
 } ubo;
 
 // global descriptors
-layout(set = 0, binding = 1) uniform samplerCube irradiance_sampler;
-layout(set = 0, binding = 2) uniform samplerCube prefilter_sampler;
-layout(set = 0, binding = 3) uniform sampler2D brdf_sampler;
+layout(set = 0, binding = 2) uniform samplerCube irradiance_sampler;
+layout(set = 0, binding = 3) uniform samplerCube prefilter_sampler;
+layout(set = 0, binding = 4) uniform sampler2D brdf_sampler;
 
 // material descriptors
 layout(set = 1, binding = 0) uniform sampler2D color_sampler;

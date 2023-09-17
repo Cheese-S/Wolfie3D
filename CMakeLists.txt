@@ -118,6 +118,8 @@ target_sources(${PROJECT_NAME} PRIVATE
     src/scene_graph/components/texture.cpp
     src/scene_graph/components/transform.cpp
     src/scene_graph/components/transform.hpp
+    src/scene_graph/components/skin.cpp
+    src/scene_graph/components/skin.hpp
     src/scene_graph/scripts/free_camera.cpp
     src/scene_graph/scripts/free_camera.hpp
     src/scene_graph/scripts/arc_ball_camera.cpp

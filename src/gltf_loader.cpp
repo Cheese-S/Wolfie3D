@@ -3,6 +3,10 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <queue>
 
+#include <iostream>
+
+#include "glm/gtx/string_cast.hpp"
+
 #include "common/error.hpp"
 #include "common/file_utils.hpp"
 #include "common/utils.hpp"
@@ -20,6 +24,7 @@
 #include "scene_graph/components/pbr_material.hpp"
 #include "scene_graph/components/perspective_camera.hpp"
 #include "scene_graph/components/sampler.hpp"
+#include "scene_graph/components/skin.hpp"
 #include "scene_graph/components/submesh.hpp"
 #include "scene_graph/components/texture.hpp"
 #include "scene_graph/components/transform.hpp"
@@ -134,6 +139,7 @@ sg::Scene GLTFLoader::parse_scene(int scene_idx)
 	load_materials();
 	batch_upload_images();
 	load_meshs();
+	load_skins();
 	load_nodes(scene_idx);
 	load_cameras();
 	load_default_camera();
@@ -413,6 +419,7 @@ void GLTFLoader::load_materials()
 		append_textures_to_material(gltf_material.additionalValues, p_textures, p_material.get());
 		p_scene_->add_component(std::move(p_material));
 	}
+	std::unique_ptr<sg::PBRMaterial> p_default_material = create_default_material();
 }
 
 std::unique_ptr<sg::PBRMaterial> GLTFLoader::parse_material(
@@ -526,6 +533,8 @@ void GLTFLoader::load_meshs()
 
 		p_scene_->add_component(std::move(p_mesh));
 	}
+
+	p_scene_->add_component(std::move(p_default_material));
 }
 
 std::unique_ptr<sg::Mesh> GLTFLoader::parse_mesh(const tinygltf::Mesh &gltf_mesh) const
@@ -545,24 +554,24 @@ std::unique_ptr<sg::SubMesh> GLTFLoader::parse_submesh(sg::Mesh *p_mesh, const t
 	std::vector<sg::Vertex> vertexs;
 	vertexs.reserve(p_submesh->vertex_count_);
 
-	const float    *p_pos    = get_attr_data_ptr<float>(gltf_submesh, "POSITION");
-	const float    *p_norm   = get_attr_data_ptr<float>(gltf_submesh, "NORMAL");
-	const float    *p_uv     = get_attr_data_ptr<float>(gltf_submesh, "TEXCOORD_0");
-	const uint16_t *p_joint  = get_attr_data_ptr<uint16_t>(gltf_submesh, "JOINTS_0");
-	const float    *p_weight = get_attr_data_ptr<float>(gltf_submesh, "WEIGHTS_0");
-	const float    *p_color  = get_attr_data_ptr<float>(gltf_submesh, "COLOR_0");
+	DataAccessInfo<float>    pos    = get_attr_data_ptr<float>(gltf_submesh, "POSITION");
+	DataAccessInfo<float>    norm   = get_attr_data_ptr<float>(gltf_submesh, "NORMAL");
+	DataAccessInfo<float>    uv     = get_attr_data_ptr<float>(gltf_submesh, "TEXCOORD_0");
+	DataAccessInfo<uint16_t> joint  = get_attr_data_ptr<uint16_t>(gltf_submesh, "JOINTS_0");
+	DataAccessInfo<float>    weight = get_attr_data_ptr<float>(gltf_submesh, "WEIGHTS_0");
+	DataAccessInfo<float>    color  = get_attr_data_ptr<float>(gltf_submesh, "COLOR_0");
 
-	bool is_skinned = p_joint && p_weight;
+	bool is_skinned = joint.p_data && weight.p_data;
 
 	for (size_t i = 0; i < p_submesh->vertex_count_; i++)
 	{
 		vertexs.emplace_back(sg::Vertex{
-		    .pos    = glm::make_vec3(&p_pos[i * 3]),
-		    .norm   = p_norm ? glm::normalize(glm::make_vec3(&p_norm[i * 3])) : DEFAULT_NORMAL,
-		    .uv     = p_uv ? glm::make_vec2(&p_uv[i * 2]) : DEFAULT_UV,
-		    .joint  = is_skinned ? glm::vec4(glm::make_vec4(&p_joint[i * 4])) : DEFAULT_JOINT,
-		    .weight = is_skinned ? glm::make_vec4(&p_weight[i * 4]) : DEFAULT_WEIGHT,
-		    .color  = p_color ? glm::make_vec4(&p_color[i * 4]) : DEFAULT_COLOR,
+		    .pos    = glm::make_vec3(&pos.p_data[i * pos.stride]),
+		    .norm   = norm.p_data ? glm::normalize(glm::make_vec3(&norm.p_data[i * norm.stride])) : DEFAULT_NORMAL,
+		    .uv     = uv.p_data ? glm::make_vec2(&uv.p_data[i * uv.stride]) : DEFAULT_UV,
+		    .joint  = is_skinned ? glm::vec4(glm::make_vec4(&joint.p_data[i * joint.stride])) : DEFAULT_JOINT,
+		    .weight = is_skinned ? glm::make_vec4(&weight.p_data[i * weight.stride]) : DEFAULT_WEIGHT,
+		    .color  = color.p_data ? glm::make_vec4(&color.p_data[i * color.stride]) : DEFAULT_COLOR,
 		});
 	}
 
@@ -706,6 +715,7 @@ std::vector<std::unique_ptr<sg::Node>> GLTFLoader::parse_nodes()
 {
 	std::vector<sg::Camera *>              p_cameras = p_scene_->get_components<sg::Camera>();
 	std::vector<sg::Mesh *>                p_meshs   = p_scene_->get_components<sg::Mesh>();
+	std::vector<sg::Skin *>                p_skins   = p_scene_->get_components<sg::Skin>();
 	std::vector<std::unique_ptr<sg::Node>> p_nodes;
 	p_nodes.reserve(gltf_model_.nodes.size());
 
@@ -728,6 +738,13 @@ std::vector<std::unique_ptr<sg::Node>> GLTFLoader::parse_nodes()
 			sg::Camera *p_camera = p_cameras[gltf_node.camera];
 			p_node->set_component(*p_camera);
 			p_camera->set_node(*p_node);
+		}
+
+		if (gltf_node.skin >= 0)
+		{
+			assert(gltf_node.skin < p_skins.size());
+			sg::Skin *p_skin = p_skins[gltf_node.skin];
+			p_node->set_component(*p_skin);
 		}
 
 		p_nodes.push_back(std::move(p_node));
@@ -767,7 +784,7 @@ std::unique_ptr<sg::Node> GLTFLoader::parse_node(const tinygltf::Node &gltf_node
 	{
 		glm::mat4 matrix;
 		std::transform(gltf_node.matrix.begin(), gltf_node.matrix.end(), glm::value_ptr(matrix), TypeCast<double, float>{});
-		transform.set_world_M(matrix);
+		transform.set_local_M(matrix);
 	}
 
 	return node;
@@ -904,6 +921,44 @@ std::vector<sg::AnimationChannel> GLTFLoader::parse_animation_channels(const tin
 	}
 
 	return channels;
+}
+
+void GLTFLoader::load_skins()
+{
+	std::vector<std::unique_ptr<sg::Skin>> p_skins;
+	p_skins.reserve(gltf_model_.skins.size());
+	for (const auto &gltf_skin : gltf_model_.skins)
+	{
+		p_skins.push_back(parse_skin(gltf_skin));
+	}
+	p_scene_->set_components(std::move(p_skins));
+}
+
+std::unique_ptr<sg::Skin> GLTFLoader::parse_skin(const tinygltf::Skin &gltf_skin)
+{
+	const std::vector<int> &joints = gltf_skin.joints;
+	if (joints.size() > sg::Skin::MAX_NUM_JOINTS)
+	{
+		LOGE("Skin {} exceeds the joint limits.", gltf_skin.name);
+		abort();
+	}
+	std::unique_ptr<sg::Skin> p_skin = std::make_unique<sg::Skin>(gltf_skin.name);
+
+	auto                 &IBMs = p_skin->get_IBMs();
+	DataAccessInfo<float> IBM  = get_accessor_data_ptr<float>(gltf_skin.inverseBindMatrices);
+
+	for (int joint_id = 0; joint_id < joints.size(); joint_id++)
+	{
+		p_skin->add_new_joint(joint_id, joints[joint_id]);
+		IBMs[joint_id] = glm::make_mat4(&IBM.p_data[joint_id * IBM.stride]);
+	}
+
+	for (int i = 0; i < gltf_skin.joints.size(); i++)
+	{
+		std::cout << i << " " << glm::to_string(IBMs[i]) << std::endl;
+	}
+
+	return p_skin;
 }
 
 tinygltf::Scene *GLTFLoader::pick_scene(int scene_idx)

@@ -83,42 +83,48 @@ inline MouseButton translate_mouse_button(int button)
 	return MouseButton::eUnknown;
 }
 
-void resize_callback(GLFWwindow *window, int width, int height)
+void resize_callback(GLFWwindow *p_window, int width, int height)
 {
 	ResizeEvent event;
-	Renderer   *p_renderer = reinterpret_cast<Renderer *>(glfwGetWindowUserPointer(window));
+	Renderer   *p_renderer = reinterpret_cast<Renderer *>(glfwGetWindowUserPointer(p_window));
 	p_renderer->process_event(event);
 }
 
-void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods)
+void key_callback(GLFWwindow *p_window, int key, int scancode, int action, int mods)
 {
 	KeyCode   key_code   = translate_key_code(key);
 	KeyAction key_action = translate_key_action(action);
-	Renderer *p_renderer = reinterpret_cast<Renderer *>(glfwGetWindowUserPointer(window));
+	Renderer *p_renderer = reinterpret_cast<Renderer *>(glfwGetWindowUserPointer(p_window));
 
-	p_renderer->process_event(KeyInputEvent(key_code, key_action));
+	p_renderer->process_event(KeyEvent(key_code, key_action));
 }
 
-void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
+void mouse_button_callback(GLFWwindow *p_window, int button, int action, int mods)
 {
 	MouseAction mouse_action = translate_mouse_action(action);
 	MouseButton mouse_button = translate_mouse_button(button);
 
 	double xpos, ypos;
-	glfwGetCursorPos(window, &xpos, &ypos);
+	glfwGetCursorPos(p_window, &xpos, &ypos);
 
-	auto pRenderer = reinterpret_cast<Renderer *>(glfwGetWindowUserPointer(window));
-	pRenderer->process_event(MouseButtonInputEvent{
+	auto p_renderer = reinterpret_cast<Renderer *>(glfwGetWindowUserPointer(p_window));
+	p_renderer->process_event(MouseButtonEvent{
 	    mouse_button,
 	    mouse_action,
 	    static_cast<float>(xpos),
 	    static_cast<float>(ypos)});
 }
 
-void cursor_position_callback(GLFWwindow *window, double xpos, double ypos)
+void cursor_position_callback(GLFWwindow *p_window, double xpos, double ypos)
 {
-	auto pRenderer = reinterpret_cast<Renderer *>(glfwGetWindowUserPointer(window));
-	pRenderer->process_event(MouseButtonInputEvent{MouseButton::eUnknown, MouseAction::eMove, static_cast<float>(xpos), static_cast<float>(ypos)});
+	auto p_renderer = reinterpret_cast<Renderer *>(glfwGetWindowUserPointer(p_window));
+	p_renderer->process_event(MouseButtonEvent{MouseButton::eUnknown, MouseAction::eMove, static_cast<float>(xpos), static_cast<float>(ypos)});
+}
+
+void scroll_callback(GLFWwindow *p_window, double x_offset, double y_offset)
+{
+	auto p_renderer = reinterpret_cast<Renderer *>(glfwGetWindowUserPointer(p_window));
+	p_renderer->process_event(ScrollEvent(x_offset, y_offset));
 }
 
 void Window::push_required_extensions(std::vector<const char *> &extensions)
@@ -154,6 +160,7 @@ void Window::register_callbacks(Renderer &renderer)
 	glfwSetKeyCallback(handle_, key_callback);
 	glfwSetMouseButtonCallback(handle_, mouse_button_callback);
 	glfwSetCursorPosCallback(handle_, cursor_position_callback);
+	glfwSetScrollCallback(handle_, scroll_callback);
 }
 
 vk::SurfaceKHR Window::create_surface(Instance &instance)

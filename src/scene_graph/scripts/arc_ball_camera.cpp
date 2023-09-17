@@ -22,18 +22,25 @@ ArcBallCamera::ArcBallCamera(Node &camera_node, const AABB &scene_bd) :
 void ArcBallCamera::update(float delta_time)
 {
 	glm::vec3 delta_rotation(0.0f, 0.0f, 0.0f);
+	float     delta_dist_ = 0.0f;
 	if (mouse_button_pressed_[MouseButton::eLeft])
 	{
 		delta_rotation.x -= 4.8 * mouse_move_delta_.y;
 		delta_rotation.y -= 4.8 * mouse_move_delta_.x;
 	}
 
+	if (scroll_delta_.y != 0)
+	{
+		delta_dist_ -= scroll_delta_.y * 3.0;
+	}
+
 	delta_rotation *= delta_time;
 
-	if (delta_rotation != glm::vec3(0.0f))
+	if (delta_rotation != glm::vec3(0.0f) || delta_dist_ != 0)
 	{
 		auto &T         = get_node().get_transform();
 		float cos_theta = glm::dot(glm::normalize(T.get_rotation() * glm::vec3(0.0f, 0.0f, -1.0f)), glm::vec3(0.0f, 1.0f, 0.0f));
+		dist_ += delta_dist_;
 
 		if (cos_theta * (delta_rotation.x >= 0 ? 1 : -1) > 0.99f)
 		{
@@ -48,13 +55,14 @@ void ArcBallCamera::update(float delta_time)
 	}
 
 	mouse_move_delta_ = {};
+	scroll_delta_     = {};
 }
 
 void ArcBallCamera::process_event(const Event &event)
 {
 	if (event.type == EventType::eMouseButton)
 	{
-		const auto &mouse_event = static_cast<const MouseButtonInputEvent &>(event);
+		const auto &mouse_event = static_cast<const MouseButtonEvent &>(event);
 		glm::vec2   mouse_pos{std::floor(mouse_event.xpos), std::floor(mouse_event.ypos)};
 		switch (mouse_event.action)
 		{
@@ -73,6 +81,12 @@ void ArcBallCamera::process_event(const Event &event)
 				break;
 		}
 	}
+	else if (event.type == EventType::eScroll)
+	{
+		const auto &scroll_event = static_cast<const ScrollEvent &>(event);
+		scroll_delta_.x += scroll_event.x_offset;
+		scroll_delta_.y += scroll_event.y_offset;
+	}
 }
 
 void ArcBallCamera::resize(uint32_t width, uint32_t height)
@@ -86,9 +100,6 @@ void ArcBallCamera::resize(uint32_t width, uint32_t height)
 			camera->set_aspect_ratio(static_cast<float>(width) / height);
 		}
 	}
-
-	viewport_width_  = width;
-	viewport_height_ = height;
 };
 
 }        // namespace W3D::sg

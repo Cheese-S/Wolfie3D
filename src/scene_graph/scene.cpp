@@ -69,6 +69,12 @@ Node &Scene::get_root_node()
 	return *root_;
 }
 
+Node &Scene::get_node_by_index(int idx)
+{
+	assert(idx >= 0 && idx < p_nodes_.size());
+	return *p_nodes_[idx].get();
+}
+
 AABB &Scene::get_bound()
 {
 	return bound_;

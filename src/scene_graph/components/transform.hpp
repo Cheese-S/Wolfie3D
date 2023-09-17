@@ -24,7 +24,7 @@ class Transform : public Component
 	void set_tranlsation(const glm::vec3 &translation);
 	void set_rotation(const glm::quat &rotation);
 	void set_scale(const glm::vec3 &scale);
-	void set_world_M(const glm::mat4 &world_M);
+	void set_local_M(const glm::mat4 &local_M);
 	void invalidate_world_M();
 
   private:

@@ -6,6 +6,7 @@ enum class EventType
 {
 	eKeyInput,
 	eMouseButton,
+	eScroll,
 	eResize
 };
 
@@ -55,9 +56,9 @@ struct ResizeEvent : Event
 	    Event(EventType::eResize){};
 };
 
-struct KeyInputEvent : Event
+struct KeyEvent : Event
 {
-	KeyInputEvent(KeyCode code, KeyAction action) :
+	KeyEvent(KeyCode code, KeyAction action) :
 	    Event(EventType::eKeyInput),
 	    code(code),
 	    action(action)
@@ -67,9 +68,9 @@ struct KeyInputEvent : Event
 	KeyAction action;
 };
 
-struct MouseButtonInputEvent : Event
+struct MouseButtonEvent : Event
 {
-	MouseButtonInputEvent(MouseButton button, MouseAction action, float pos_x, float pos_y) :
+	MouseButtonEvent(MouseButton button, MouseAction action, float pos_x, float pos_y) :
 	    Event(EventType::eMouseButton),
 	    button(button),
 	    action(action),
@@ -81,6 +82,18 @@ struct MouseButtonInputEvent : Event
 	MouseAction action;
 	float       xpos;
 	float       ypos;
+};
+
+struct ScrollEvent : Event
+{
+	ScrollEvent(float x_offset, float y_offset) :
+	    Event(EventType::eScroll),
+	    x_offset(x_offset),
+	    y_offset(y_offset)
+	{
+	}
+	float x_offset;
+	float y_offset;
 };
 
 }        // namespace W3D

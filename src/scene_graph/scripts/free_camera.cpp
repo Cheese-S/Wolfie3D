@@ -83,7 +83,7 @@ void FreeCamera::process_event(const Event &event)
 {
 	if (event.type == EventType::eKeyInput)
 	{
-		const auto &key_event = static_cast<const KeyInputEvent &>(event);
+		const auto &key_event = static_cast<const KeyEvent &>(event);
 
 		if (key_event.action == KeyAction::eDown || key_event.action == KeyAction::eRepeat)
 		{
@@ -96,7 +96,7 @@ void FreeCamera::process_event(const Event &event)
 	}
 	else if (event.type == EventType::eMouseButton)
 	{
-		const auto &mouse_event = static_cast<const MouseButtonInputEvent &>(event);
+		const auto &mouse_event = static_cast<const MouseButtonEvent &>(event);
 		glm::vec2   mouse_pos{std::floor(mouse_event.xpos), std::floor(mouse_event.ypos)};
 		switch (mouse_event.action)
 		{

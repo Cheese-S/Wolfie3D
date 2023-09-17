@@ -27,6 +27,7 @@ class PBRMaterial;
 class Sampler;
 class Texture;
 class AABB;
+class Skin;
 struct AnimationSampler;
 struct AnimationChannel;
 struct Vertex;
@@ -58,6 +59,7 @@ class GLTFLoader
 	void load_cameras();
 	void load_nodes(int scene_idx);
 	void load_animations();
+	void load_skins();
 	void load_default_camera();
 
 	std::vector<std::unique_ptr<sg::Node>> parse_nodes();
@@ -77,6 +79,7 @@ class GLTFLoader
 	void                              parse_animation_input_data(const tinygltf::AnimationSampler &gltf_sampler, sg::AnimationSampler &sampler);
 	void                              parse_animation_output_data(const tinygltf::AnimationSampler &gltf_sampler, sg::AnimationSampler &sampler);
 	std::vector<sg::AnimationChannel> parse_animation_channels(const tinygltf::Animation &gltf_animation, std::vector<sg::Node *> p_nodes);
+	std::unique_ptr<sg::Skin>         parse_skin(const tinygltf::Skin &gltf_skin);
 
 	std::unique_ptr<sg::PBRMaterial> create_default_material() const;
 	std::unique_ptr<sg::Texture>     create_default_texture(sg::Sampler &default_sampler) const;
@@ -94,15 +97,29 @@ class GLTFLoader
 	void             init_scene_bound();
 
 	template <typename T>
-	const T *get_attr_data_ptr(const tinygltf::Primitive &submesh, const char *name) const
+	struct DataAccessInfo
+	{
+		const T *p_data;
+		size_t   stride;        // This is stride is not BYTE stride, but T stride.
+	};
+
+	template <typename T>
+	DataAccessInfo<T> get_attr_data_ptr(const tinygltf::Primitive &submesh, const char *name) const
 	{
 		auto it = submesh.attributes.find(name);
 		if (it == submesh.attributes.end())
 		{
-			return nullptr;
+			return {
+			    .p_data = nullptr,
+			    .stride = 0,
+			};
 		}
+		return get_accessor_data_ptr<T>(it->second);
+	}
 
-		uint32_t accessor_id = it->second;
+	template <typename T>
+	DataAccessInfo<T> get_accessor_data_ptr(int accessor_id) const
+	{
 		assert(accessor_id < gltf_model_.accessors.size());
 		const tinygltf::Accessor &accessor = gltf_model_.accessors[accessor_id];
 		assert(accessor.bufferView < gltf_model_.bufferViews.size());
@@ -110,7 +127,10 @@ class GLTFLoader
 		assert(buffer_view.buffer < gltf_model_.buffers.size());
 		const tinygltf::Buffer &buffer = gltf_model_.buffers[buffer_view.buffer];
 
-		return reinterpret_cast<const T *>(&buffer.data[accessor.byteOffset + buffer_view.byteOffset]);
+		return {
+		    .p_data = reinterpret_cast<const T *>(&buffer.data[accessor.byteOffset + buffer_view.byteOffset]),
+		    .stride = accessor.ByteStride(buffer_view) / sizeof(T),
+		};
 	}
 
 	const Device                  &device_;

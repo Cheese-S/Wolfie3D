@@ -20,8 +20,7 @@ class ArcBallCamera : public NodeScript
 	glm::vec3                             center_;
 	glm::vec2                             mouse_last_pos_;
 	glm::vec2                             mouse_move_delta_;
-	uint32_t                              viewport_width_;
-	uint32_t                              viewport_height_;
+	glm::vec2                             scroll_delta_;
 	std::unordered_map<MouseButton, bool> mouse_button_pressed_;
 };
 }        // namespace W3D::sg

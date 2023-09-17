@@ -26,13 +26,11 @@ void Animation::update(float delta_time)
 
 void Animation::update_by_channel(const AnimationChannel &channel)
 {
-	std::cout << "start ";
 	const AnimationSampler &sampler = channel.sampler;
 	for (size_t i = 0; i < sampler.inputs.size() - 1; i++)
 	{
 		if (current_time_ >= sampler.inputs[i] && current_time_ <= sampler.inputs[i + 1])
 		{
-			std::cout << "update ";
 			if (sampler.type == AnimationType::eLinear)
 			{
 				linear_update(channel, i);
@@ -47,7 +45,6 @@ void Animation::update_by_channel(const AnimationChannel &channel)
 			}
 		}
 	}
-	std::cout << "end" << std::endl;
 }
 
 void Animation::linear_update(const AnimationChannel &channel, size_t i)

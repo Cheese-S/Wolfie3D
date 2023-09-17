@@ -8,6 +8,7 @@
 #include "core/sampler.hpp"
 #include "device_memory/buffer.hpp"
 #include "pbr_baker.hpp"
+#include "scene_graph/components/skin.hpp"
 #include "sync_objects.hpp"
 
 namespace W3D
@@ -61,7 +62,8 @@ class Renderer
 		// 	rhs.skybox_set = nullptr;
 		// };
 		CommandBuffer     cmd_buf;
-		Buffer            uniform_buf;
+		Buffer            camera_buf;
+		Buffer            joint_buf;
 		Semaphore         image_avaliable_semaphore;
 		Semaphore         render_finished_semaphore;
 		Fence             in_flight_fence;
@@ -81,7 +83,13 @@ class Renderer
 		eMaterial = 1,
 	};
 
-	struct UBO
+	struct JointUBO
+	{
+		glm::mat4 joint_Ms[sg::Skin::MAX_NUM_JOINTS];
+		float     is_skinned;
+	};
+
+	struct CameraUBO
 	{
 		glm::mat4 proj_view;
 		glm::vec3 cam_pos;
@@ -107,14 +115,17 @@ class Renderer
 	void     sync_present(uint32_t img_idx);
 	void     record_draw_commands(uint32_t img_idx);
 
-	void update_frame_ubo();
+	void update_camera_ubo();
 	void set_dynamic_states(CommandBuffer &cmd_buf);
 	void begin_render_pass(CommandBuffer &cmd_buf, vk::Framebuffer framebuffer);
 	void draw_scene(CommandBuffer &cmd_buf);
 	void draw_skybox(CommandBuffer &cmd_buf);
+	void draw_node(CommandBuffer &cmd_buf, sg::Node &node);
 	void draw_submesh(CommandBuffer &cmd_buf, sg::SubMesh &submesh);
 	void bind_material(CommandBuffer &cmd_buf, const sg::PBRMaterial &material);
-	void push_node_model_matrix(CommandBuffer &cmd_buf, sg::Node *p_node);
+	void bind_skin(CommandBuffer &cmd_buf, const sg::Skin &skin);
+	void disable_skin(CommandBuffer &cmd_buf);
+	void push_node_model_matrix(CommandBuffer &cmd_buf, sg::Node &node);
 
 	void           resize();
 	FrameResource &get_current_frame_resource();

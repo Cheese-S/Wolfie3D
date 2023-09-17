@@ -89,6 +89,7 @@ class Scene
 	bool                    has_component(const std::type_index &type) const;
 	Node                   &get_root_node();
 	std::vector<sg::Node *> get_nodes();
+	Node                   &get_node_by_index(int idx);
 	AABB                   &get_bound();
 
   private:

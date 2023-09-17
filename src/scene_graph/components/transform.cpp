@@ -31,6 +31,7 @@ glm::mat4 Transform::get_world_M()
 		auto &transform = parent->get_transform();
 		world_M_        = transform.get_world_M() * world_M_;
 	}
+
 	need_update_ = false;
 	return world_M_;
 }
@@ -73,17 +74,26 @@ void Transform::set_scale(const glm::vec3 &scale)
 	invalidate_world_M();
 }
 
-void Transform::set_world_M(const glm::mat4 &world_M)
+void Transform::set_local_M(const glm::mat4 &local_M)
 {
 	glm::vec3 skew;
 	glm::vec4 perspective;
-	glm::decompose(world_M, scale_, rotation_, translation_, skew, perspective);
+	glm::decompose(local_M, scale_, rotation_, translation_, skew, perspective);
 	invalidate_world_M();
 }
 
 void Transform::invalidate_world_M()
 {
-	need_update_ = true;
+	need_update_                       = true;
+	std::vector<sg::Node *> p_children = node_.get_children();
+	for (sg::Node *p_child : p_children)
+	{
+		Transform &child_T = p_child->get_transform();
+		if (!child_T.need_update_)
+		{
+			child_T.invalidate_world_M();
+		}
+	}
 }
 
 }        // namespace W3D::sg

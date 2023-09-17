@@ -49,7 +49,7 @@ Renderer::Renderer()
 	p_descriptor_state_ = std::make_unique<DescriptorState>(*p_device_);
 	p_cmd_pool_         = std::make_unique<CommandPool>(*p_device_, p_device_->get_graphics_queue(), p_physical_device_->get_graphics_queue_family_index());
 	p_swapchain_        = std::make_unique<Swapchain>(*p_device_, p_window_->get_extent());
-	load_scene("2.0/AnimatedCube/glTF/AnimatedCube.gltf");
+	load_scene("2.0/Fox/glTF/Fox.gltf");
 	create_pbr_resources();
 	create_rendering_resources();
 	p_sframe_buffer_ = std::make_unique<SwapchainFramebuffer>(*p_device_, *p_swapchain_, *p_render_pass_);
@@ -79,7 +79,14 @@ void Renderer::update()
 {
 	double delta_time = timer_.tick();
 	p_camera_node_->get_component<sg::Script>().update(delta_time);
-	p_scene_->find_component<sg::Animation>("animation_AnimatedCube")->update(delta_time);
+	std::vector<sg::Animation *> p_animations = p_scene_->get_components<sg::Animation>();
+	for (auto p_animation : p_animations)
+	{
+		if (p_animation->get_name() == "Run")
+		{
+			p_animation->update(delta_time);
+		};
+	}
 }
 
 void Renderer::render_frame()
@@ -188,7 +195,7 @@ void Renderer::record_draw_commands(uint32_t img_idx)
 	CommandBuffer &cmd_buf = get_current_frame_resource().cmd_buf;
 	cmd_buf.reset();
 	cmd_buf.begin();
-	update_frame_ubo();
+	update_camera_ubo();
 	set_dynamic_states(cmd_buf);
 	begin_render_pass(cmd_buf, p_sframe_buffer_->get_handle(img_idx));
 	draw_skybox(cmd_buf);
@@ -197,17 +204,17 @@ void Renderer::record_draw_commands(uint32_t img_idx)
 	cmd_buf.get_handle().end();
 }
 
-void Renderer::update_frame_ubo()
+void Renderer::update_camera_ubo()
 {
-	sg::Camera &camera      = p_camera_node_->get_component<sg::Camera>();
-	Buffer     &uniform_buf = get_current_frame_resource().uniform_buf;
+	sg::Camera &camera = p_camera_node_->get_component<sg::Camera>();
+	Buffer     &buf    = get_current_frame_resource().camera_buf;
 
-	UBO ubo{
+	CameraUBO ubo{
 	    .proj_view = camera.get_projection() * camera.get_view(),
 	    .cam_pos   = p_camera_node_->get_transform().get_translation(),
 	};
 
-	uniform_buf.update(&ubo, sizeof(ubo));
+	buf.update(&ubo, sizeof(ubo));
 }
 
 void Renderer::set_dynamic_states(CommandBuffer &cmd_buf)
@@ -302,17 +309,7 @@ void Renderer::draw_scene(CommandBuffer &cmd_buf)
 		sg::Node *p_node = p_nodes.front();
 		p_nodes.pop();
 
-		if (p_node->has_component<sg::Mesh>())
-		{
-			push_node_model_matrix(cmd_buf, p_node);
-			std::vector<sg::SubMesh *> p_submeshs = p_node->get_component<sg::Mesh>().get_p_submeshs();
-			for (sg::SubMesh *p_submesh : p_submeshs)
-			{
-				const sg::PBRMaterial *p_pbr_material = dynamic_cast<const sg::PBRMaterial *>(p_submesh->get_material());
-				bind_material(cmd_buf, *p_pbr_material);
-				draw_submesh(cmd_buf, *p_submesh);
-			}
-		}
+		draw_node(cmd_buf, *p_node);
 
 		std::vector<sg::Node *> p_children = p_node->get_children();
 		for (sg::Node *p_child : p_children)
@@ -322,15 +319,38 @@ void Renderer::draw_scene(CommandBuffer &cmd_buf)
 	}
 }
 
-void Renderer::push_node_model_matrix(CommandBuffer &cmd_buf, sg::Node *p_node)
+void Renderer::draw_node(CommandBuffer &cmd_buf, sg::Node &node)
 {
-	glm::mat4 rotated_m = p_node->get_transform().get_world_M();
+	if (node.has_component<sg::Mesh>())
+	{
+		if (node.has_component<sg::Skin>())
+		{
+			bind_skin(cmd_buf, node.get_component<sg::Skin>());
+		}
+		else
+		{
+			disable_skin(cmd_buf);
+		}
+		push_node_model_matrix(cmd_buf, node);
+		std::vector<sg::SubMesh *> p_submeshs = node.get_component<sg::Mesh>().get_p_submeshs();
+		for (sg::SubMesh *p_submesh : p_submeshs)
+		{
+			const sg::PBRMaterial *p_pbr_material = dynamic_cast<const sg::PBRMaterial *>(p_submesh->get_material());
+			bind_material(cmd_buf, *p_pbr_material);
+			draw_submesh(cmd_buf, *p_submesh);
+		}
+	}
+}
+
+void Renderer::push_node_model_matrix(CommandBuffer &cmd_buf, sg::Node &node)
+{
+	glm::mat4 rotated_m = node.get_transform().get_world_M();
 	// rotated_m           = glm::scale(rotated_m, glm::vec3(0.5, 0.5, 0.5));
 	PBRPCO pco = {
 	    .model = rotated_m,
 	};
 	cmd_buf.get_handle().pushConstants<PBRPCO>(pbr_.p_pl->get_pipeline_layout(), vk::ShaderStageFlagBits::eVertex, 0, pco);
-}        // namespace W3D
+}
 
 void Renderer::bind_material(CommandBuffer &cmd_buf, const sg::PBRMaterial &material)
 {
@@ -340,6 +360,26 @@ void Renderer::bind_material(CommandBuffer &cmd_buf, const sg::PBRMaterial &mate
 	    1,
 	    material.set,
 	    {});
+}
+
+void Renderer::bind_skin(CommandBuffer &cmd_buf, const sg::Skin &skin)
+{
+	Buffer &buf = get_current_frame_resource().joint_buf;
+
+	JointUBO ubo{
+	    .is_skinned = 1,
+	};
+
+	skin.compute_joint_Ms(*p_scene_, ubo.joint_Ms);
+
+	buf.update(&ubo, sizeof(ubo));
+}
+
+void Renderer::disable_skin(CommandBuffer &cmd_buf)
+{
+	Buffer &buf        = get_current_frame_resource().joint_buf;
+	float   is_skinned = 0;
+	buf.update(&is_skinned, sizeof(is_skinned), offsetof(JointUBO, is_skinned));
 }
 
 void Renderer::draw_submesh(CommandBuffer &cmd_buf, sg::SubMesh &submesh)
@@ -408,7 +448,8 @@ void Renderer::create_frame_resources()
 	{
 		frame_resources_.push_back({
 		    .cmd_buf                   = std::move(p_cmd_pool_->allocate_command_buffer()),
-		    .uniform_buf               = std::move(p_device_->get_device_memory_allocator().allocate_uniform_buffer(sizeof(UBO))),
+		    .camera_buf                = std::move(p_device_->get_device_memory_allocator().allocate_uniform_buffer(sizeof(CameraUBO))),
+		    .joint_buf                 = std::move(p_device_->get_device_memory_allocator().allocate_uniform_buffer(sizeof(JointUBO))),
 		    .image_avaliable_semaphore = std::move(Semaphore(*p_device_)),
 		    .render_finished_semaphore = std::move(Semaphore(*p_device_)),
 		    .in_flight_fence           = std::move(Fence(*p_device_, vk::FenceCreateFlagBits::eSignaled)),
@@ -445,18 +486,25 @@ void Renderer::create_pbr_desc_resources()
 
 	for (uint32_t i = 0; i < NUM_INFLIGHT_FRAMES; i++)
 	{
-		vk::DescriptorBufferInfo ubo{
-		    .buffer = frame_resources_[i].uniform_buf.get_handle(),
+		vk::DescriptorBufferInfo camera_bbinfo{
+		    .buffer = frame_resources_[i].camera_buf.get_handle(),
 		    .offset = 0,
-		    .range  = sizeof(UBO),
+		    .range  = sizeof(CameraUBO),
+		};
+
+		vk::DescriptorBufferInfo joint_bbinfo{
+		    .buffer = frame_resources_[i].joint_buf.get_handle(),
+		    .offset = 0,
+		    .range  = sizeof(JointUBO),
 		};
 
 		DescriptorAllocation allocation =
 		    DescriptorBuilder::begin(p_descriptor_state_->cache, p_descriptor_state_->allocator)
-		        .bind_buffer(0, ubo, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment)
-		        .bind_image(1, irradiance, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eFragment)
-		        .bind_image(2, prefilter, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eFragment)
-		        .bind_image(3, brdf_lut, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eFragment)
+		        .bind_buffer(0, camera_bbinfo, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment)
+		        .bind_buffer(1, joint_bbinfo, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eVertex)
+		        .bind_image(2, irradiance, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eFragment)
+		        .bind_image(3, prefilter, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eFragment)
+		        .bind_image(4, brdf_lut, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eFragment)
 		        .build();
 
 		frame_resources_[i].pbr_set                            = allocation.set;
