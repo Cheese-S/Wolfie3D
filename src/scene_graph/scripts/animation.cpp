@@ -5,6 +5,10 @@
 namespace W3D::sg
 {
 
+inline glm::vec3 compute_cubic_spline(const std::vector<glm::vec3> &outputs, size_t i, float interp_val, float delta);
+
+inline glm::quat compute_cubic_spline(const std::vector<glm::quat> &outputs, size_t i, float interp_val, float delta);
+
 Animation::Animation(const std::string &name) :
     Script(name)
 {
@@ -55,29 +59,22 @@ void Animation::linear_update(const AnimationChannel &channel, size_t i)
 	switch (channel.target)
 	{
 		case AnimationTarget::eTranslation:
-			T.set_tranlsation(glm::mix(channel.sampler.outputs[i], channel.sampler.outputs[i + 1], interp_val));
+		{
+			const std::vector<glm::vec3> &vecs = channel.sampler.get_vecs();
+			T.set_tranlsation(glm::mix(vecs[i], vecs[i + 1], interp_val));
 			break;
+		}
 		case AnimationTarget::eRotation:
 		{
-			glm::quat q1;
-			q1.x = channel.sampler.outputs[i].x;
-			q1.y = channel.sampler.outputs[i].y;
-			q1.z = channel.sampler.outputs[i].z;
-			q1.w = channel.sampler.outputs[i].w;
-
-			glm::quat q2;
-			q2.x = channel.sampler.outputs[i + 1].x;
-			q2.y = channel.sampler.outputs[i + 1].y;
-			q2.z = channel.sampler.outputs[i + 1].z;
-			q2.w = channel.sampler.outputs[i + 1].w;
-
-			T.set_rotation(glm::normalize(glm::slerp(q1, q2, interp_val)));
+			const std::vector<glm::quat> &quats = channel.sampler.get_quats();
+			T.set_rotation(glm::normalize(glm::slerp(quats[i], quats[i + 1], interp_val)));
 			break;
 		}
 
 		case AnimationTarget::eScale:
 		{
-			T.set_scale(glm::mix(channel.sampler.outputs[i], channel.sampler.outputs[i + 1], interp_val));
+			const std::vector<glm::vec3> &vecs = channel.sampler.get_vecs();
+			T.set_scale(glm::mix(vecs[i], vecs[i + 1], interp_val));
 			break;
 		}
 	}
@@ -90,23 +87,17 @@ void Animation::step_update(const AnimationChannel &channel, size_t i)
 	{
 		case AnimationTarget::eTranslation:
 		{
-			T.set_tranlsation(channel.sampler.outputs[i]);
+			T.set_tranlsation(channel.sampler.get_vecs()[i]);
 			break;
 		}
 		case AnimationTarget::eRotation:
 		{
-			glm::quat q;
-			q.x = channel.sampler.outputs[i].x;
-			q.y = channel.sampler.outputs[i].y;
-			q.z = channel.sampler.outputs[i].z;
-			q.w = channel.sampler.outputs[i].w;
-
-			T.set_rotation(glm::normalize(q));
+			T.set_rotation(glm::normalize(channel.sampler.get_quats()[i]));
 			break;
 		}
 		case AnimationTarget::eScale:
 		{
-			T.set_scale(channel.sampler.outputs[i]);
+			T.set_scale(channel.sampler.get_vecs()[i]);
 			break;
 		}
 	}
@@ -119,29 +110,17 @@ void Animation::cubic_spline_update(const AnimationChannel &channel, size_t i)
 	float                   delta      = sampler.inputs[i + 1] - channel.sampler.inputs[i];
 	float                   interp_val = (current_time_ - sampler.inputs[i]) / (sampler.inputs[i + 1] - sampler.inputs[i]);
 
-	glm::vec4 p0 = sampler.outputs[i * 3 + 1];
-	glm::vec4 p1 = sampler.outputs[(i + 1) * 3 + 1];
-
-	glm::vec4 m0 = delta * sampler.outputs[i * 3 + 2];
-	glm::vec4 m1 = delta * sampler.outputs[(i + 1) * 3 + 0];
-
-	glm::vec4 result = (2.0f * glm::pow(interp_val, 3.0f) - 3.0f * glm::pow(interp_val, 2.0f) + 1.0f) * p0 + (glm::pow(interp_val, 3.0f) - 2.0f * glm::pow(interp_val, 2.0f) + interp_val) * m0 + (-2.0f * glm::pow(interp_val, 3.0f) + 3.0f * glm::pow(interp_val, 2.0f)) * p1 + (glm::pow(interp_val, 3.0f) - glm::pow(interp_val, 2.0f)) * m1;
-
 	switch (channel.target)
 	{
 		case AnimationTarget::eTranslation:
-			T.set_tranlsation(result);
+			T.set_tranlsation(compute_cubic_spline(sampler.get_vecs(), i, interp_val, delta));
 			break;
 		case AnimationTarget::eRotation:
-			glm::quat q;
-			q.x = result.x;
-			q.y = result.y;
-			q.z = result.z;
-			q.w = result.w;
-			T.set_rotation(glm::normalize(q));
+
+			T.set_rotation(glm::normalize(compute_cubic_spline(sampler.get_quats(), i, interp_val, delta)));
 			break;
 		case AnimationTarget::eScale:
-			T.set_scale(result);
+			T.set_scale(compute_cubic_spline(sampler.get_vecs(), i, interp_val, delta));
 			break;
 	}
 }
@@ -172,5 +151,31 @@ void Animation::update_interval()
 void Animation::set_channels(std::vector<AnimationChannel> &&channels)
 {
 	channels_ = std::move(channels);
+}
+
+inline glm::vec3 compute_cubic_spline(const std::vector<glm::vec3> &outputs, size_t i, float interp_val, float delta)
+{
+	glm::vec3 p0 = outputs[i * 3 + 1];
+	glm::vec3 p1 = outputs[(i + 1) * 3 + 1];
+
+	glm::vec3 m0 = delta * outputs[i * 3 + 2];
+	glm::vec3 m1 = delta * outputs[(i + 1) * 3 + 0];
+
+	glm::vec3 result = (2.0f * glm::pow(interp_val, 3.0f) - 3.0f * glm::pow(interp_val, 2.0f) + 1.0f) * p0 + (glm::pow(interp_val, 3.0f) - 2.0f * glm::pow(interp_val, 2.0f) + interp_val) * m0 + (-2.0f * glm::pow(interp_val, 3.0f) + 3.0f * glm::pow(interp_val, 2.0f)) * p1 + (glm::pow(interp_val, 3.0f) - glm::pow(interp_val, 2.0f)) * m1;
+
+	return result;
+}
+
+inline glm::quat compute_cubic_spline(const std::vector<glm::quat> &outputs, size_t i, float interp_val, float delta)
+{
+	glm::quat p0 = outputs[i * 3 + 1];
+	glm::quat p1 = outputs[(i + 1) * 3 + 1];
+
+	glm::quat m0 = delta * outputs[i * 3 + 2];
+	glm::quat m1 = delta * outputs[(i + 1) * 3 + 0];
+
+	glm::quat result = (2.0f * glm::pow(interp_val, 3.0f) - 3.0f * glm::pow(interp_val, 2.0f) + 1.0f) * p0 + (glm::pow(interp_val, 3.0f) - 2.0f * glm::pow(interp_val, 2.0f) + interp_val) * m0 + (-2.0f * glm::pow(interp_val, 3.0f) + 3.0f * glm::pow(interp_val, 2.0f)) * p1 + (glm::pow(interp_val, 3.0f) - glm::pow(interp_val, 2.0f)) * m1;
+
+	return result;
 }
 }        // namespace W3D::sg

@@ -38,13 +38,12 @@ struct ImageTransferInfo;
 class GLTFLoader
 {
   public:
+	static const glm::vec3 W3D_CONVERSION_SCALE;
+
 	GLTFLoader(Device const &device);
-
 	virtual ~GLTFLoader() = default;
-
-	std::unique_ptr<sg::Scene> read_scene_from_file(const std::string &file_name,
-	                                                int                scene_index = -1);
-
+	std::unique_ptr<sg::Scene>   read_scene_from_file(const std::string &file_name,
+	                                                  int                scene_index = -1);
 	std::unique_ptr<sg::SubMesh> read_model_from_file(const std::string &file_name, int mesh_idx);
 
   private:
@@ -76,8 +75,8 @@ class GLTFLoader
 	std::unique_ptr<sg::SubMesh> parse_submesh_as_model(
 	    const tinygltf::Primitive &gltf_primitive) const;
 	std::vector<sg::AnimationSampler> parse_animation_samplers(const tinygltf::Animation &gltf_animation);
-	void                              parse_animation_input_data(const tinygltf::AnimationSampler &gltf_sampler, sg::AnimationSampler &sampler);
-	void                              parse_animation_output_data(const tinygltf::AnimationSampler &gltf_sampler, sg::AnimationSampler &sampler);
+	void                              parse_animation_input_data(const tinygltf::AnimationSampler &gltf_sampler, sg::AnimationSampler &sampler) const;
+	void                              parse_animation_output_data(const tinygltf::AnimationSampler &gltf_sampler, sg::AnimationSampler &sampler) const;
 	std::vector<sg::AnimationChannel> parse_animation_channels(const tinygltf::Animation &gltf_animation, std::vector<sg::Node *> p_nodes);
 	std::unique_ptr<sg::Skin>         parse_skin(const tinygltf::Skin &gltf_skin);
 

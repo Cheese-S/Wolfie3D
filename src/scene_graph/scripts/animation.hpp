@@ -1,5 +1,7 @@
 #pragma once
 
+#include <variant>
+
 #include "scene_graph/script.hpp"
 
 namespace W3D::sg
@@ -21,9 +23,48 @@ enum class AnimationTarget
 
 struct AnimationSampler
 {
-	AnimationType          type;
-	std::vector<float>     inputs;
-	std::vector<glm::vec4> outputs;
+	void init_vecs()
+	{
+		outputs_.emplace<std::vector<glm::vec3>>();
+	};
+
+	void init_quats()
+	{
+		outputs_.emplace<std::vector<glm::quat>>();
+	};
+
+	const std::vector<glm::vec3> &get_vecs() const
+	{
+		assert(outputs_.index() == 0);
+		return std::get<std::vector<glm::vec3>>(outputs_);
+	}
+
+	const std::vector<glm::quat> &get_quats() const
+	{
+		assert(outputs_.index() == 1);
+		return std::get<std::vector<glm::quat>>(outputs_);
+	}
+
+	std::vector<glm::vec3> &get_mut_vecs()
+	{
+		assert(outputs_.index() == 0);
+		return std::get<std::vector<glm::vec3>>(outputs_);
+	}
+
+	std::vector<glm::quat> &get_mut_quats()
+	{
+		assert(outputs_.index() == 1);
+		return std::get<std::vector<glm::quat>>(outputs_);
+	}
+
+	AnimationType      type;
+	std::vector<float> inputs;
+
+  private:
+	std::variant<
+	    std::vector<glm::vec3>,
+	    std::vector<glm::quat>>
+	    outputs_;
 };
 
 struct AnimationChannel

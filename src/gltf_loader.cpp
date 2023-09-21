@@ -39,8 +39,13 @@ inline vk::Filter             to_vk_min_filter(int min_filter);
 inline vk::Filter             to_vk_mag_filter(int mag_filter);
 inline vk::SamplerMipmapMode  to_vk_mipmap_mode(int mipmap_mode);
 inline vk::SamplerAddressMode to_vk_wrap_mode(int wrap_mode);
+inline void                   to_sg_channel_output(sg::AnimationChannel &channel);
 inline sg::AnimationType      to_sg_animation_type(const std::string &interpolation);
 inline sg::AnimationTarget    to_sg_animation_target(const std::string &target);
+inline void                   to_W3D_vector_in_place(glm::vec3 &vec);
+inline void                   to_W3D_quaternion_in_place(glm::quat &quat);
+inline void                   to_W3D_matrix_in_place(glm::mat4 &M);
+void                          to_W3D_output_data_in_place(sg::AnimationSampler &sampler, sg::AnimationTarget target);
 inline vk::Format             get_attr_format(const tinygltf::Model &model, uint32_t accessor_id);
 inline std::vector<uint8_t>   get_attr_data(const tinygltf::Model &model, uint32_t accessor_id);
 inline std::vector<uint8_t>   convert_data_stride(const std::vector<uint8_t> &src, uint32_t src_stride, uint32_t dst_stride);
@@ -50,6 +55,8 @@ const glm::vec2 DEFAULT_UV     = glm::vec2(0.0f);
 const glm::vec4 DEFAULT_JOINT  = glm::vec4(0.0f);
 const glm::vec4 DEFAULT_WEIGHT = glm::vec4(0.0f);
 const glm::vec4 DEFAULT_COLOR  = glm::vec4(0.0f, 0.0f, 0.0f, 0.0f);
+
+const glm::vec3 GLTFLoader::W3D_CONVERSION_SCALE = glm::vec3(-1, 1, 1);
 
 template <class T, class Y>
 struct TypeCast
@@ -140,8 +147,8 @@ sg::Scene GLTFLoader::parse_scene(int scene_idx)
 	batch_upload_images();
 	load_meshs();
 	load_skins();
-	load_nodes(scene_idx);
 	load_cameras();
+	load_nodes(scene_idx);
 	load_default_camera();
 	load_animations();
 	init_scene_bound();
@@ -573,6 +580,8 @@ std::unique_ptr<sg::SubMesh> GLTFLoader::parse_submesh(sg::Mesh *p_mesh, const t
 		    .weight = is_skinned ? glm::make_vec4(&weight.p_data[i * weight.stride]) : DEFAULT_WEIGHT,
 		    .color  = color.p_data ? glm::make_vec4(&color.p_data[i * color.stride]) : DEFAULT_COLOR,
 		});
+		to_W3D_vector_in_place(vertexs.back().pos);
+		to_W3D_vector_in_place(vertexs.back().norm);
 	}
 
 	size_t vertex_buf_size    = vertexs.size() * sizeof(sg::Vertex);
@@ -763,13 +772,18 @@ std::unique_ptr<sg::Node> GLTFLoader::parse_node(const tinygltf::Node &gltf_node
 	{
 		glm::vec3 translation;
 		std::transform(gltf_node.translation.begin(), gltf_node.translation.end(), glm::value_ptr(translation), TypeCast<double, float>{});
+		to_W3D_vector_in_place(translation);
 		transform.set_tranlsation(translation);
 	}
 
 	if (!gltf_node.rotation.empty())
 	{
 		glm::quat rotation;
-		std::transform(gltf_node.rotation.begin(), gltf_node.rotation.end(), glm::value_ptr(rotation), TypeCast<double, float>{});
+		rotation.x = gltf_node.rotation[0];
+		rotation.y = gltf_node.rotation[1];
+		rotation.z = gltf_node.rotation[2];
+		rotation.w = gltf_node.rotation[3];
+		to_W3D_quaternion_in_place(rotation);
 		transform.set_rotation(rotation);
 	}
 
@@ -784,6 +798,7 @@ std::unique_ptr<sg::Node> GLTFLoader::parse_node(const tinygltf::Node &gltf_node
 	{
 		glm::mat4 matrix;
 		std::transform(gltf_node.matrix.begin(), gltf_node.matrix.end(), glm::value_ptr(matrix), TypeCast<double, float>{});
+		to_W3D_matrix_in_place(matrix);
 		transform.set_local_M(matrix);
 	}
 
@@ -843,6 +858,27 @@ void GLTFLoader::load_animations()
 	p_scene_->set_components(std::move(p_animations));
 }
 
+std::vector<sg::AnimationChannel> GLTFLoader::parse_animation_channels(const tinygltf::Animation &gltf_animation, std::vector<sg::Node *> p_nodes)
+{
+	std::vector<sg::AnimationSampler> samplers = parse_animation_samplers(gltf_animation);
+	std::vector<sg::AnimationChannel> channels;
+	channels.reserve(gltf_animation.channels.size());
+
+	for (size_t i = 0; i < gltf_animation.channels.size(); i++)
+	{
+		const tinygltf::AnimationChannel &gltf_channel = gltf_animation.channels[i];
+
+		channels.push_back(sg::AnimationChannel{
+		    .node    = *p_nodes[gltf_channel.target_node],
+		    .target  = to_sg_animation_target(gltf_channel.target_path),
+		    .sampler = samplers[gltf_channel.sampler],
+		});
+		to_W3D_output_data_in_place(channels.back().sampler, channels.back().target);
+	}
+
+	return channels;
+}
+
 std::vector<sg::AnimationSampler> GLTFLoader::parse_animation_samplers(const tinygltf::Animation &gltf_animation)
 {
 	std::vector<sg::AnimationSampler> samplers;
@@ -860,38 +896,49 @@ std::vector<sg::AnimationSampler> GLTFLoader::parse_animation_samplers(const tin
 	return samplers;
 }
 
-void GLTFLoader::parse_animation_input_data(const tinygltf::AnimationSampler &gltf_sampler, sg::AnimationSampler &sampler)
+void GLTFLoader::parse_animation_input_data(const tinygltf::AnimationSampler &gltf_sampler, sg::AnimationSampler &sampler) const
 {
-	tinygltf::Accessor  &input_accessor = gltf_model_.accessors[gltf_sampler.input];
-	std::vector<uint8_t> input_data     = get_attr_data(gltf_model_, gltf_sampler.input);
-	const float         *p_input_data   = reinterpret_cast<const float *>(input_data.data());
+	const tinygltf::Accessor &input_accessor = gltf_model_.accessors[gltf_sampler.input];
+	std::vector<uint8_t>      input_data     = get_attr_data(gltf_model_, gltf_sampler.input);
+	const float              *p_input_data   = reinterpret_cast<const float *>(input_data.data());
 	for (size_t i = 0; i < input_accessor.count; i++)
 	{
 		sampler.inputs.push_back(p_input_data[i]);
 	}
 }
 
-void GLTFLoader::parse_animation_output_data(const tinygltf::AnimationSampler &gltf_sampler, sg::AnimationSampler &sampler)
+void GLTFLoader::parse_animation_output_data(const tinygltf::AnimationSampler &gltf_sampler, sg::AnimationSampler &sampler) const
 {
-	tinygltf::Accessor  &output_accessor = gltf_model_.accessors[gltf_sampler.output];
-	std::vector<uint8_t> output_data     = get_attr_data(gltf_model_, gltf_sampler.output);
+	const tinygltf::Accessor &output_accessor = gltf_model_.accessors[gltf_sampler.output];
+	std::vector<uint8_t>      output_data     = get_attr_data(gltf_model_, gltf_sampler.output);
 	switch (output_accessor.type)
 	{
 		case TINYGLTF_TYPE_VEC3:
 		{
-			const glm::vec3 *p_output_data = reinterpret_cast<const glm::vec3 *>(output_data.data());
+			sampler.init_vecs();
+			std::vector<glm::vec3> &sampler_outputs = sampler.get_mut_vecs();
+
+			const glm::vec3 *p_vecs = reinterpret_cast<const glm::vec3 *>(output_data.data());
 			for (size_t i = 0; i < output_accessor.count; i++)
 			{
-				sampler.outputs.push_back(glm::vec4(p_output_data[i], 0.0f));
+				sampler_outputs.push_back(glm::vec3(p_vecs[i]));
 			}
 			break;
 		}
 		case TINYGLTF_TYPE_VEC4:
 		{
-			const glm::vec4 *p_output_data = reinterpret_cast<const glm::vec4 *>(output_data.data());
+			sampler.init_quats();
+			std::vector<glm::quat> &sampler_outputs = sampler.get_mut_quats();
+
+			const float *p_float = reinterpret_cast<const float *>(output_data.data());
 			for (size_t i = 0; i < output_accessor.count; i++)
 			{
-				sampler.outputs.push_back(p_output_data[i]);
+				// gltf passes in quat as (x, y, z, w)
+				sampler_outputs.push_back(glm::quat::wxyz(
+				    p_float[i * 4 + 3],
+				    p_float[i * 4 + 0],
+				    p_float[i * 4 + 1],
+				    p_float[i * 4 + 2]));
 			}
 			break;
 		}
@@ -902,25 +949,6 @@ void GLTFLoader::parse_animation_output_data(const tinygltf::AnimationSampler &g
 			break;
 		}
 	}
-}
-
-std::vector<sg::AnimationChannel> GLTFLoader::parse_animation_channels(const tinygltf::Animation &gltf_animation, std::vector<sg::Node *> p_nodes)
-{
-	std::vector<sg::AnimationSampler> samplers = parse_animation_samplers(gltf_animation);
-	std::vector<sg::AnimationChannel> channels;
-	channels.reserve(gltf_animation.channels.size());
-
-	for (size_t i = 0; i < gltf_animation.channels.size(); i++)
-	{
-		const tinygltf::AnimationChannel &gltf_channel = gltf_animation.channels[i];
-		channels.push_back(sg::AnimationChannel{
-		    .node    = *p_nodes[gltf_channel.target_node],
-		    .target  = to_sg_animation_target(gltf_channel.target_path),
-		    .sampler = samplers[gltf_channel.sampler],
-		});
-	}
-
-	return channels;
 }
 
 void GLTFLoader::load_skins()
@@ -950,12 +978,9 @@ std::unique_ptr<sg::Skin> GLTFLoader::parse_skin(const tinygltf::Skin &gltf_skin
 	for (int joint_id = 0; joint_id < joints.size(); joint_id++)
 	{
 		p_skin->add_new_joint(joint_id, joints[joint_id]);
-		IBMs[joint_id] = glm::make_mat4(&IBM.p_data[joint_id * IBM.stride]);
-	}
-
-	for (int i = 0; i < gltf_skin.joints.size(); i++)
-	{
-		std::cout << i << " " << glm::to_string(IBMs[i]) << std::endl;
+		glm::mat4 m = glm::make_mat4(&IBM.p_data[joint_id * IBM.stride]);
+		to_W3D_matrix_in_place(m);
+		IBMs[joint_id] = m;
 	}
 
 	return p_skin;
@@ -1048,6 +1073,10 @@ inline vk::SamplerAddressMode to_vk_wrap_mode(int wrap_mode)
 	}
 }
 
+inline void to_sg_animation_output(sg::AnimationChannel &channel)
+{
+}
+
 inline sg::AnimationType to_sg_animation_type(const std::string &interpolation)
 {
 	if (interpolation == "LINEAR")
@@ -1082,6 +1111,54 @@ inline sg::AnimationTarget to_sg_animation_target(const std::string &target)
 	}
 	LOGW("Animation target {} is not supported!", target);
 	return sg::AnimationTarget::eTranslation;
+}
+
+inline void to_W3D_vector_in_place(glm::vec3 &vec)
+{
+	vec *= GLTFLoader::W3D_CONVERSION_SCALE;
+}
+
+inline void to_W3D_quaternion_in_place(glm::quat &quat)
+{
+	// We need to flip the handiness
+	float     flip_scale        = -1;
+	glm::vec3 new_axis_rotation = flip_scale * glm::vec3(quat.x, quat.y, quat.z) * GLTFLoader::W3D_CONVERSION_SCALE;
+	quat.x                      = new_axis_rotation.x;
+	quat.y                      = new_axis_rotation.y;
+	quat.z                      = new_axis_rotation.z;
+}
+
+inline void to_W3D_matrix_in_place(glm::mat4 &M)
+{
+	glm::mat4 convert = glm::scale(glm::mat4(1.0f), GLTFLoader::W3D_CONVERSION_SCALE);
+	M                 = convert * M * convert;
+}
+
+void to_W3D_output_data_in_place(sg::AnimationSampler &sampler, sg::AnimationTarget target)
+{
+	switch (target)
+	{
+		case sg::AnimationTarget::eTranslation:
+		{
+			std::vector<glm::vec3> &vecs = sampler.get_mut_vecs();
+			for (auto &vec : vecs)
+			{
+				to_W3D_vector_in_place(vec);
+			}
+			break;
+		}
+		case sg::AnimationTarget::eRotation:
+		{
+			std::vector<glm::quat> &quats = sampler.get_mut_quats();
+			for (auto &quat : quats)
+			{
+				to_W3D_quaternion_in_place(quat);
+			}
+			break;
+		}
+		case sg::AnimationTarget::eScale:
+			break;
+	}
 }
 
 inline vk::Format get_attr_format(const tinygltf::Model &model, uint32_t accessor_id)

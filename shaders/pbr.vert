@@ -33,8 +33,8 @@ void main() {
     weight.y * joint_ubo.M[int(joint.y)] + 
     weight.z * joint_ubo.M[int(joint.z)] + 
     weight.w * joint_ubo.M[int(joint.w)];
-    gl_Position = camera_ubo.proj_view *  skin_M * vec4(position, 1.0);
-    out_normal = normalize(transpose(inverse(mat3(skin_M))) * normal);
+    gl_Position = camera_ubo.proj_view * pco.model * skin_M * vec4(position, 1.0);
+    out_normal = normalize(transpose(inverse(mat3(pco.model * skin_M))) * normal);
 
     } else {
         gl_Position = camera_ubo.proj_view * pco.model * vec4(position, 1.0);

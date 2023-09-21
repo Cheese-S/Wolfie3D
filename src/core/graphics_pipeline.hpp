@@ -21,6 +21,7 @@ struct InputAssemblyState
 	vk::Bool32            primitive_restart_enable = false;
 };
 
+// TODO: fix the defalt state
 struct RasterizationState
 {
 	vk::Bool32        depth_clamp_enable        = false;

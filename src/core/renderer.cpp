@@ -82,7 +82,7 @@ void Renderer::update()
 	std::vector<sg::Animation *> p_animations = p_scene_->get_components<sg::Animation>();
 	for (auto p_animation : p_animations)
 	{
-		if (p_animation->get_name() == "Run")
+		if (p_animation->get_name() == "Survey")
 		{
 			p_animation->update(delta_time);
 		};
@@ -243,7 +243,7 @@ void Renderer::set_dynamic_states(CommandBuffer &cmd_buf)
 void Renderer::begin_render_pass(CommandBuffer &cmd_buf, vk::Framebuffer framebuffer)
 {
 	std::array<vk::ClearValue, 2> clear_values{
-	    std::array<float, 4>{0.0f, 0.0f, 0.0f, 0.0f},
+	    std::array<float, 4>{0.54f, 0.81f, 0.94f, 1.0f},
 	};
 	clear_values[1].depthStencil = vk::ClearDepthStencilValue{1.0f, 0};
 
@@ -345,10 +345,9 @@ void Renderer::draw_node(CommandBuffer &cmd_buf, sg::Node &node)
 void Renderer::push_node_model_matrix(CommandBuffer &cmd_buf, sg::Node &node)
 {
 	glm::mat4 rotated_m = node.get_transform().get_world_M();
-	// rotated_m           = glm::scale(rotated_m, glm::vec3(0.5, 0.5, 0.5));
-	PBRPCO pco = {
-	    .model = rotated_m,
-	};
+	PBRPCO    pco       = {
+	             .model = rotated_m,
+    };
 	cmd_buf.get_handle().pushConstants<PBRPCO>(pbr_.p_pl->get_pipeline_layout(), vk::ShaderStageFlagBits::eVertex, 0, pco);
 }
 
@@ -364,6 +363,7 @@ void Renderer::bind_material(CommandBuffer &cmd_buf, const sg::PBRMaterial &mate
 
 void Renderer::bind_skin(CommandBuffer &cmd_buf, const sg::Skin &skin)
 {
+	// TODO: debug skinning
 	Buffer &buf = get_current_frame_resource().joint_buf;
 
 	JointUBO ubo{
@@ -424,8 +424,6 @@ void Renderer::load_scene(const char *scene_name)
 
 	vk::Extent2D window_extent = p_window_->get_extent();
 	p_camera_node_             = add_arc_ball_camera_script(*p_scene_, "main_camera", window_extent.width, window_extent.height);
-
-	std::cout << p_scene_->get_bound().to_string() << std::endl;
 }
 
 void Renderer::create_pbr_resources()
@@ -640,7 +638,9 @@ void Renderer::create_pipeline_resources()
 	        .attribute_descriptions = sg::Vertex::get_input_attr_descriptions(),
 	        .binding_descriptions   = binding_descriptions,
 	    },
-	};
+	    .rasterization_state = {
+	        .cull_mode = vk::CullModeFlagBits::eFront,
+	    }};
 
 	std::array<vk::PushConstantRange, 1> pbr_push_const_ranges;
 	pbr_push_const_ranges[0] = {
@@ -670,7 +670,7 @@ void Renderer::create_pipeline_resources()
 	};
 	pl_state.vert_shader_name                       = "skybox.vert.spv";
 	pl_state.frag_shader_name                       = "skybox.frag.spv";
-	pl_state.rasterization_state.cull_mode          = vk::CullModeFlagBits::eFront;
+	pl_state.rasterization_state.cull_mode          = vk::CullModeFlagBits::eBack;
 	pl_state.depth_stencil_state.depth_test_enable  = false;
 	pl_state.depth_stencil_state.depth_write_enable = false;
 	skybox_.p_pl                                    = std::make_unique<GraphicsPipeline>(*p_device_, *p_render_pass_, pl_state, skybox_pl_layout_cinfo);
