@@ -611,9 +611,6 @@ GraphicsPipeline PBRBaker::create_graphics_pipeline(RenderPass &render_pass, vk:
 	        .attribute_descriptions = sg::Vertex::get_input_attr_descriptions(),
 	        .binding_descriptions   = binding_descriptions,
 	    },
-	    .rasterization_state = {
-	        .front_face = vk::FrontFace::eClockwise,
-	    },
 	    .depth_stencil_state = {
 	        .depth_test_enable  = false,
 	        .depth_write_enable = false,

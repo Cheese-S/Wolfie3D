@@ -21,7 +21,8 @@ struct InputAssemblyState
 	vk::Bool32            primitive_restart_enable = false;
 };
 
-// TODO: fix the defalt state
+// gltf's winding order is ccw. However, we flip its x coordinate during importing.
+// Therefore, we use a cw winding order
 struct RasterizationState
 {
 	vk::Bool32        depth_clamp_enable        = false;
@@ -29,7 +30,7 @@ struct RasterizationState
 	vk::Bool32        rasterizer_discard_enable = false;
 	vk::PolygonMode   polygon_mode              = vk::PolygonMode::eFill;
 	vk::CullModeFlags cull_mode                 = vk::CullModeFlagBits::eBack;
-	vk::FrontFace     front_face                = vk::FrontFace::eCounterClockwise;
+	vk::FrontFace     front_face                = vk::FrontFace::eClockwise;
 };
 
 struct MultisampleState

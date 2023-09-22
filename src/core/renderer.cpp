@@ -49,7 +49,7 @@ Renderer::Renderer()
 	p_descriptor_state_ = std::make_unique<DescriptorState>(*p_device_);
 	p_cmd_pool_         = std::make_unique<CommandPool>(*p_device_, p_device_->get_graphics_queue(), p_physical_device_->get_graphics_queue_family_index());
 	p_swapchain_        = std::make_unique<Swapchain>(*p_device_, p_window_->get_extent());
-	load_scene("2.0/Fox/glTF/Fox.gltf");
+	load_scene("2.0/InterpolationTest/glTF/InterpolationTest.gltf");
 	create_pbr_resources();
 	create_rendering_resources();
 	p_sframe_buffer_ = std::make_unique<SwapchainFramebuffer>(*p_device_, *p_swapchain_, *p_render_pass_);
@@ -82,7 +82,7 @@ void Renderer::update()
 	std::vector<sg::Animation *> p_animations = p_scene_->get_components<sg::Animation>();
 	for (auto p_animation : p_animations)
 	{
-		if (p_animation->get_name() == "Survey")
+		// if (p_animation->get_name() == "Survey")
 		{
 			p_animation->update(delta_time);
 		};
@@ -363,7 +363,6 @@ void Renderer::bind_material(CommandBuffer &cmd_buf, const sg::PBRMaterial &mate
 
 void Renderer::bind_skin(CommandBuffer &cmd_buf, const sg::Skin &skin)
 {
-	// TODO: debug skinning
 	Buffer &buf = get_current_frame_resource().joint_buf;
 
 	JointUBO ubo{
@@ -638,9 +637,7 @@ void Renderer::create_pipeline_resources()
 	        .attribute_descriptions = sg::Vertex::get_input_attr_descriptions(),
 	        .binding_descriptions   = binding_descriptions,
 	    },
-	    .rasterization_state = {
-	        .cull_mode = vk::CullModeFlagBits::eFront,
-	    }};
+	};
 
 	std::array<vk::PushConstantRange, 1> pbr_push_const_ranges;
 	pbr_push_const_ranges[0] = {
@@ -670,7 +667,7 @@ void Renderer::create_pipeline_resources()
 	};
 	pl_state.vert_shader_name                       = "skybox.vert.spv";
 	pl_state.frag_shader_name                       = "skybox.frag.spv";
-	pl_state.rasterization_state.cull_mode          = vk::CullModeFlagBits::eBack;
+	pl_state.rasterization_state.cull_mode          = vk::CullModeFlagBits::eFront;
 	pl_state.depth_stencil_state.depth_test_enable  = false;
 	pl_state.depth_stencil_state.depth_write_enable = false;
 	skybox_.p_pl                                    = std::make_unique<GraphicsPipeline>(*p_device_, *p_render_pass_, pl_state, skybox_pl_layout_cinfo);
