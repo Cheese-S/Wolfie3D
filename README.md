@@ -8,6 +8,10 @@
 
 
 ### Build Steps
+- Clone the repo
+- switch to the HW branch
+- ```git submodule update --init --recursive``` to init the submodules
+
 - In windows powershell
 ```
 cd Wolfie3D
