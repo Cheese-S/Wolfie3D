@@ -49,7 +49,7 @@ Renderer::Renderer()
 	p_descriptor_state_ = std::make_unique<DescriptorState>(*p_device_);
 	p_cmd_pool_         = std::make_unique<CommandPool>(*p_device_, p_device_->get_graphics_queue(), p_physical_device_->get_graphics_queue_family_index());
 	p_swapchain_        = std::make_unique<Swapchain>(*p_device_, p_window_->get_extent());
-	load_scene("2.0/InterpolationTest/glTF/InterpolationTest.gltf");
+	load_scene("2.0/Box/glTF/Box.gltf");
 	create_pbr_resources();
 	create_rendering_resources();
 	p_sframe_buffer_ = std::make_unique<SwapchainFramebuffer>(*p_device_, *p_swapchain_, *p_render_pass_);
@@ -331,12 +331,17 @@ void Renderer::draw_node(CommandBuffer &cmd_buf, sg::Node &node)
 		{
 			disable_skin(cmd_buf);
 		}
-		push_node_model_matrix(cmd_buf, node);
+
+		PBRPCO pbr_pco{
+		    .model = node.get_transform().get_world_M(),
+		};
 		std::vector<sg::SubMesh *> p_submeshs = node.get_component<sg::Mesh>().get_p_submeshs();
 		for (sg::SubMesh *p_submesh : p_submeshs)
 		{
 			const sg::PBRMaterial *p_pbr_material = dynamic_cast<const sg::PBRMaterial *>(p_submesh->get_material());
-			bind_material(cmd_buf, *p_pbr_material);
+			bind_material(cmd_buf, *p_pbr_material, pbr_pco);
+			pbr_pco.material_flag = p_pbr_material->flag;
+			cmd_buf.get_handle().pushConstants<PBRPCO>(pbr_.p_pl->get_pipeline_layout(), vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment, 0, pbr_pco);
 			draw_submesh(cmd_buf, *p_submesh);
 		}
 	}
@@ -351,8 +356,12 @@ void Renderer::push_node_model_matrix(CommandBuffer &cmd_buf, sg::Node &node)
 	cmd_buf.get_handle().pushConstants<PBRPCO>(pbr_.p_pl->get_pipeline_layout(), vk::ShaderStageFlagBits::eVertex, 0, pco);
 }
 
-void Renderer::bind_material(CommandBuffer &cmd_buf, const sg::PBRMaterial &material)
+void Renderer::bind_material(CommandBuffer &cmd_buf, const sg::PBRMaterial &material, PBRPCO &pco)
 {
+	pco.material_flag        = material.flag;
+	pco.base_color           = material.base_color_factor_;
+	pco.metallic_roughness.g = material.roughness_factor;
+	pco.metallic_roughness.b = material.metallic_factor;
 	cmd_buf.get_handle().bindDescriptorSets(
 	    vk::PipelineBindPoint::eGraphics,
 	    pbr_.p_pl->get_pipeline_layout(),
@@ -641,7 +650,7 @@ void Renderer::create_pipeline_resources()
 
 	std::array<vk::PushConstantRange, 1> pbr_push_const_ranges;
 	pbr_push_const_ranges[0] = {
-	    .stageFlags = vk::ShaderStageFlagBits::eVertex,
+	    .stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
 	    .offset     = 0,
 	    .size       = sizeof(PBRPCO),
 	};

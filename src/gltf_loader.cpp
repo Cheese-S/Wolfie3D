@@ -39,6 +39,7 @@ inline vk::Filter             to_vk_min_filter(int min_filter);
 inline vk::Filter             to_vk_mag_filter(int mag_filter);
 inline vk::SamplerMipmapMode  to_vk_mipmap_mode(int mipmap_mode);
 inline vk::SamplerAddressMode to_vk_wrap_mode(int wrap_mode);
+sg::PBRMaterialFlagBits       to_sg_material_flag_bit(const std::string &texture_name);
 inline void                   to_sg_channel_output(sg::AnimationChannel &channel);
 inline sg::AnimationType      to_sg_animation_type(const std::string &interpolation);
 inline sg::AnimationTarget    to_sg_animation_target(const std::string &target);
@@ -490,19 +491,21 @@ std::unique_ptr<sg::PBRMaterial> GLTFLoader::parse_material(
 
 void GLTFLoader::append_textures_to_material(tinygltf::ParameterMap &parameter_map, std::vector<sg::Texture *> &p_textures, sg::PBRMaterial *p_material)
 {
-	// Edit img formats here
 	for (auto &value : parameter_map)
 	{
 		if (value.first.find("Texture") != std::string::npos)
 		{
-			int         texture_idx  = value.second.TextureIndex();
-			std::string texture_name = to_snake_case(to_string(value.first));
+			int                     texture_idx  = value.second.TextureIndex();
+			std::string             texture_name = to_snake_case(to_string(value.first));
+			sg::PBRMaterialFlagBits flag_bit     = to_sg_material_flag_bit(texture_name);
 			assert(texture_idx < p_textures.size());
-			if (texture_name == "base_color_texture" || texture_name == "emissive_texture")
+
+			if (flag_bit == sg::PBRMaterialFlagBits::eBaseColorTexture || flag_bit == sg::PBRMaterialFlagBits::eEmissiveTexture)
 			{
 				img_tinfos_[gltf_model_.textures[texture_idx].source].meta.format = vk::Format::eR8G8B8A8Srgb;
 			}
 			p_material->texture_map_[texture_name] = p_textures[value.second.TextureIndex()];
+			p_material->flag |= flag_bit;
 		}
 	}
 }
@@ -1073,8 +1076,17 @@ inline vk::SamplerAddressMode to_vk_wrap_mode(int wrap_mode)
 	}
 }
 
-inline void to_sg_animation_output(sg::AnimationChannel &channel)
+sg::PBRMaterialFlagBits to_sg_material_flag_bit(const std::string &texture_name)
 {
+	static std::unordered_map<std::string, sg::PBRMaterialFlagBits> name_to_flag_bit_map = {
+	    {"base_color_texture", sg::PBRMaterialFlagBits::eBaseColorTexture},
+	    {"normal_texture", sg::PBRMaterialFlagBits::eNormalTexture},
+	    {"occlusion_texture", sg::PBRMaterialFlagBits::eOcclusionTexture},
+	    {"emissive_texture", sg::PBRMaterialFlagBits::eEmissiveTexture},
+	    {"metallic_roughness_texture", sg::PBRMaterialFlagBits::eMetallicRoughnessTexture},
+	};
+	assert(name_to_flag_bit_map.count(texture_name));
+	return name_to_flag_bit_map[texture_name];
 }
 
 inline sg::AnimationType to_sg_animation_type(const std::string &interpolation)

@@ -48,19 +48,6 @@ class Renderer
 
 	struct FrameResource
 	{
-		// FrameResource(CommandBuffer && cmd_buf, Buffer && buf, Semaphore && image_avaliable_semaphore)
-		// FrameResource(FrameResource &&rhs) :
-		//     cmd_buf(std::move(rhs.cmd_buf)),
-		//     uniform_buf(std::move(rhs.uniform_buf)),
-		//     image_avaliable_semaphore(std::move(rhs.image_avaliable_semaphore)),
-		//     render_finished_semaphore(std::move(rhs.render_finished_semaphore)),
-		//     in_flight_fence(std::move(rhs.in_flight_fence)),
-		//     pbr_set(rhs.pbr_set),
-		//     skybox_set(rhs.skybox_set)
-		// {
-		// 	rhs.pbr_set    = nullptr;
-		// 	rhs.skybox_set = nullptr;
-		// };
 		CommandBuffer     cmd_buf;
 		Buffer            camera_buf;
 		Buffer            joint_buf;
@@ -104,6 +91,9 @@ class Renderer
 	struct PBRPCO
 	{
 		glm::mat4 model;
+		glm::vec4 base_color;
+		glm::vec4 metallic_roughness;
+		uint32_t  material_flag;
 	};
 
 	void main_loop();
@@ -122,7 +112,7 @@ class Renderer
 	void draw_skybox(CommandBuffer &cmd_buf);
 	void draw_node(CommandBuffer &cmd_buf, sg::Node &node);
 	void draw_submesh(CommandBuffer &cmd_buf, sg::SubMesh &submesh);
-	void bind_material(CommandBuffer &cmd_buf, const sg::PBRMaterial &material);
+	void bind_material(CommandBuffer &cmd_buf, const sg::PBRMaterial &material, PBRPCO &pco);
 	void bind_skin(CommandBuffer &cmd_buf, const sg::Skin &skin);
 	void disable_skin(CommandBuffer &cmd_buf);
 	void push_node_model_matrix(CommandBuffer &cmd_buf, sg::Node &node);
