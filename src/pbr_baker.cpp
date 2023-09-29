@@ -103,6 +103,7 @@ void PBRBaker::prepare_irradiance()
 	    .levels = max_mip_levels(IRRADIANCE_DIMENSION, IRRADIANCE_DIMENSION),
 	};
 	result_.p_irradiance = create_empty_cube_texture(cube_meta);
+	bake_irradiance(cube_meta);
 };
 
 void PBRBaker::bake_irradiance(ImageMetaInfo &cube_meta)

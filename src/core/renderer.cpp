@@ -511,8 +511,8 @@ void Renderer::create_light_desc_resources()
 void Renderer::create_skybox_desc_resources()
 {
 	vk::DescriptorImageInfo background{
-	    .sampler     = baked_pbr_.p_background->sampler.get_handle(),
-	    .imageView   = baked_pbr_.p_background->resource.get_view().get_handle(),
+	    .sampler     = baked_pbr_.p_irradiance->sampler.get_handle(),
+	    .imageView   = baked_pbr_.p_irradiance->resource.get_view().get_handle(),
 	    .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
 	};
 
