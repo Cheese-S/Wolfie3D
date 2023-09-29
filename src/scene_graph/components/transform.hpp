@@ -31,7 +31,7 @@ class Transform : public Component
 	void set_rotation(const glm::quat &rotation);
 	void set_scale(const glm::vec3 &scale);
 	void set_world_M(const glm::mat4 &world_M);
-	void invalidate_world_M();
+	void invalidate_local_M();
 
   private:
 	void update_world_M();
@@ -41,7 +41,7 @@ class Transform : public Component
 	glm::quat rotation_    = glm::quat(1.0, 0.0, 0.0, 0.0);
 	glm::vec3 scale_       = glm::vec3(1.0, 1.0, 1.0);
 
-	glm::mat4 world_M_ = glm::mat4(1.0);
+	glm::mat4 local_M_ = glm::mat4(1.0);
 
 	bool need_update_ = false;
 };

@@ -18,7 +18,7 @@ void Node::add_child(Node &child)
 void Node::set_parent(Node &parent)
 {
 	parent_ = &parent;
-	T_.invalidate_world_M();
+	T_.invalidate_local_M();
 }
 
 void Node::set_component(Component &component)

@@ -20,19 +20,19 @@ glm::mat4 Transform::get_world_M()
 {
 	if (!need_update_)
 	{
-		return world_M_;
+		return local_M_;
 	}
-	world_M_ = get_local_M();
+	local_M_ = get_local_M();
 
 	auto parent = node_.get_parent();
 
 	if (parent)
 	{
 		auto &transform = parent->get_component<Transform>();
-		world_M_        = transform.get_world_M() * world_M_;
+		local_M_        = transform.get_world_M() * local_M_;
 	}
 	need_update_ = false;
-	return world_M_;
+	return local_M_;
 }
 
 glm::mat4 Transform::get_local_M()
@@ -59,18 +59,18 @@ glm::quat Transform::get_rotation()
 void Transform::set_tranlsation(const glm::vec3 &translation)
 {
 	translation_ = translation;
-	invalidate_world_M();
+	invalidate_local_M();
 }
 void Transform::set_rotation(const glm::quat &rotation)
 {
 	rotation_ = rotation;
-	invalidate_world_M();
+	invalidate_local_M();
 }
 
 void Transform::set_scale(const glm::vec3 &scale)
 {
 	scale_ = scale;
-	invalidate_world_M();
+	invalidate_local_M();
 }
 
 void Transform::set_world_M(const glm::mat4 &world_M)
@@ -78,10 +78,10 @@ void Transform::set_world_M(const glm::mat4 &world_M)
 	glm::vec3 skew;
 	glm::vec4 perspective;
 	glm::decompose(world_M, scale_, rotation_, translation_, skew, perspective);
-	invalidate_world_M();
+	invalidate_local_M();
 }
 
-void Transform::invalidate_world_M()
+void Transform::invalidate_local_M()
 {
 	need_update_ = true;
 }
