@@ -30,7 +30,7 @@ layout(set = 1, binding = 4) uniform sampler2D metallic_roughness_map;
 layout(location = 0) out vec4 out_color;
 
 #define PI 3.1415926535897932384626433832795
-const float OCCLUSION_STRENGTH = 1.0f;
+const float OCCLUSION_STRENGTH = 0.5f;
 const float EMISSIVE_STRENGTH = 1.0f;
 
 const uint BASE_COLOR_TEXTURE_BIT         = 1 << 0;
