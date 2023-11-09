@@ -1,12 +1,13 @@
 # Wolfie 3D
 
 Wolfie 3D is the official 3D rendering engine for Stony Brook University. It’s mainly created for the purpose of teaching students about the internals of a conventional renderer. Despite is simple purpose, Wolfie3D supports many heavyweight features, such as 
-- Physically based rendering with image based lighting (IBL)
+- Physically-based rendering with image-based lighting (IBL)
 - glTF model loading 
 - IBL texture baking 
 - Skeletal animation 
 - Script and component system
 ## Libraries Used
+- [Vulkan](https://www.vulkan.org/), used for rendering. Notably, we use vulkan.hpp for better type safety. 
 - [VMA](https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator/tree/master), used for GPU memory management. 
 - [glfw](https://github.com/glfw/glfw/tree/master), used for window management.
 - [gli](https://github.com/g-truc/gli/tree/master), used for 3D texture loading. 
@@ -58,6 +59,6 @@ Wolfie 3D is the official 3D rendering engine for Stony Brook University. It’s
 - At the top of Visual Studio you should see a green arrow and the text **Local Windows Debugger**, click that and the HW application should run
 
 ## Credit
-This project took inspirations from 
+This project took inspiration from 
 - [Official-Vulkan-Samples](https://github.com/KhronosGroup/Vulkan-Samples)
 - [Vulkan-glTF-PBR](https://github.com/SaschaWillems/Vulkan-glTF-PBR)
