@@ -6,6 +6,13 @@ Wolfie 3D is the official 3D rendering engine for Stony Brook University. It’s
 - IBL texture baking 
 - Skeletal animation 
 - Script and component system
+
+### PBR Example
+![PBR](pbr.png)
+
+### Animation Example
+![Animation](fox.gif)
+
 ## Libraries Used
 - [Vulkan](https://www.vulkan.org/), used for rendering. Notably, we use vulkan.hpp for better type safety. 
 - [VMA](https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator/tree/master), used for GPU memory management. 
@@ -15,7 +22,7 @@ Wolfie 3D is the official 3D rendering engine for Stony Brook University. It’s
 - [spdlog](https://github.com/gabime/spdlog), used for logging. 
 - [stb](https://github.com/nothings/stb), used for 2D image loading. 
 - [tinygltf](https://github.com/syoyo/tinygltf), 
-- *[RenderDoc], for debugging.
+- [RenderDoc](https://renderdoc.org/), for debugging.
 ## Building 
 ### Prerequisites
 - [Download and install Visual Studio 2022](https://visualstudio.microsoft.com/vs/)
