@@ -18,6 +18,7 @@ class Node;
 class Component;
 class SubMesh;
 
+// This class is responsible for managing all scene-related resources, including all components.
 class Scene
 {
   public:
@@ -25,6 +26,9 @@ class Scene
 	Scene(const std::string &name);
 
 	void add_component(std::unique_ptr<Component> &&pComponent);
+
+	// Find a component with type T by name
+	// Return the raw pointer that component if there is one.
 	template <typename T>
 	T *find_component(const std::string &name)
 	{
@@ -51,6 +55,8 @@ class Scene
 	Node *find_node(const std::string &name);
 	void  add_component_to_node(std::unique_ptr<Component> &&pComponent, Node &node);
 
+	// Helper functions that set a vector of components.
+	// The resource passed in will now be owned by the scene.
 	template <typename T>
 	void set_components(std::vector<std::unique_ptr<T>> p_ts)
 	{
@@ -63,6 +69,7 @@ class Scene
 	void set_components(const std::type_index                   type,
 	                    std::vector<std::unique_ptr<Component>> pComponents);
 
+	// Helper function that returns RAW pointers to components with type T.
 	template <typename T>
 	std::vector<T *> get_components() const
 	{

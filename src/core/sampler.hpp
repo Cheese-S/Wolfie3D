@@ -8,6 +8,8 @@ namespace W3D
 class Device;
 class PhysicalDevice;
 
+// Wrapper class for VkSampler
+// Sampler is responsible for describing how a texture should be sampled.
 class Sampler : public VulkanObject<vk::Sampler>
 {
   public:

@@ -7,6 +7,8 @@ namespace W3D
 {
 namespace sg
 {
+
+// An abstract component class.
 class Component
 {
   public:
@@ -15,7 +17,7 @@ class Component
 	Component(const std::string &name);
 
 	const std::string      &get_name() const;
-	virtual std::type_index get_type() = 0;
+	virtual std::type_index get_type() = 0;        // This function allows us to get list of components by type.
 
   private:
 	std::string name_;

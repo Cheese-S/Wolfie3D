@@ -16,6 +16,7 @@ std::type_index Transform::get_type()
 	return typeid(Transform);
 }
 
+// Return the world transform.
 glm::mat4 Transform::get_world_M()
 {
 	if (!need_update_)
@@ -74,6 +75,7 @@ void Transform::set_scale(const glm::vec3 &scale)
 	invalidate_world_M();
 }
 
+// Decompose a matrix to SRT.
 void Transform::set_local_M(const glm::mat4 &local_M)
 {
 	glm::vec3 skew;
@@ -82,6 +84,7 @@ void Transform::set_local_M(const glm::mat4 &local_M)
 	invalidate_world_M();
 }
 
+// We need to propgate the change to children transforms.
 void Transform::invalidate_world_M()
 {
 	need_update_                       = true;

@@ -6,6 +6,9 @@
 namespace W3D::sg
 {
 class Node;
+
+// Abstract Camera Component.
+// Any class extending this needs to provide a way to generate projection matrix.
 class Camera : public Component
 {
   public:
@@ -18,11 +21,10 @@ class Camera : public Component
 
 	virtual glm::mat4 get_projection() = 0;
 	glm::mat4         get_view();
-	const glm::mat4   get_pre_rotation();
 	Node             *get_node();
 
   private:
-	Node     *pNode_{nullptr};
+	Node     *p_node_{nullptr};
 	glm::mat4 pre_rotation_{1.0f};
 };
 }        // namespace W3D::sg

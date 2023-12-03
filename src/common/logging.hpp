@@ -10,6 +10,7 @@
 
 #define __FILENAME__ (static_cast<const char *>(__FILE__) + ROOT_PATH_SIZE)
 
+// Logging macro. The real work is delegated to spdlog.
 #define LOGI(...) spdlog::info(__VA_ARGS__);
 #define LOGW(...) spdlog::warn(__VA_ARGS__);
 #define LOGE(...) spdlog::error("[{}:{}] {}\\n", __FILENAME__, __LINE__, fmt::format(__VA_ARGS__));

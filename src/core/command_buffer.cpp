@@ -9,6 +9,7 @@
 namespace W3D
 {
 
+// Create a wrapper with the given handle and pool.
 CommandBuffer::CommandBuffer(vk::CommandBuffer handle, CommandPool &pool, vk::CommandBufferLevel level) :
     VulkanObject(handle),
     pool_(pool),
@@ -16,6 +17,7 @@ CommandBuffer::CommandBuffer(vk::CommandBuffer handle, CommandPool &pool, vk::Co
 {
 }
 
+// * We use free list to manage command buffers. Therefore, we recycle them instead of freeing them directly.
 CommandBuffer::~CommandBuffer()
 {
 	if (handle_ && pool_.get_handle())
@@ -25,6 +27,7 @@ CommandBuffer::~CommandBuffer()
 	}
 }
 
+// Move constructor
 CommandBuffer::CommandBuffer(CommandBuffer &&rhs) :
     VulkanObject(std::move(rhs)),
     pool_(rhs.pool_),
@@ -32,6 +35,7 @@ CommandBuffer::CommandBuffer(CommandBuffer &&rhs) :
 {
 }
 
+// Set the command buffer to begin state.
 void CommandBuffer::begin(vk::CommandBufferUsageFlags flag)
 {
 	vk::CommandBufferBeginInfo cmd_buf_binfo{
@@ -40,6 +44,7 @@ void CommandBuffer::begin(vk::CommandBufferUsageFlags flag)
 	handle_.begin(cmd_buf_binfo);
 }
 
+// Submit the commandbuffer to a queue specified by the pool.
 void CommandBuffer::flush(vk::SubmitInfo submit_info)
 {
 	submit_info.commandBufferCount = 1;
@@ -47,6 +52,7 @@ void CommandBuffer::flush(vk::SubmitInfo submit_info)
 	pool_.get_queue().submit(submit_info);
 }
 
+// Reset the pool to initial state.
 void CommandBuffer::reset()
 {
 	if (pool_.get_reset_strategy() == CommandPoolResetStrategy::eIndividual)
@@ -55,6 +61,7 @@ void CommandBuffer::reset()
 	}
 }
 
+// Helper function to copy bytes from a buffer into a ImageResource's image.
 void CommandBuffer::update_image(ImageResource &resource, Buffer &staging_buf)
 {
 	auto                            &subresource_range = resource.get_view().get_subresource_range();
@@ -62,6 +69,7 @@ void CommandBuffer::update_image(ImageResource &resource, Buffer &staging_buf)
 	handle_.copyBufferToImage(staging_buf.get_handle(), resource.get_image().get_handle(), vk::ImageLayout::eTransferDstOptimal, copy_regions);
 }
 
+// Helper function to convert a vkImage's format.
 void CommandBuffer::set_image_layout(ImageResource &resource, vk::ImageLayout old_layout, vk::ImageLayout new_layout, vk::PipelineStageFlags src_stage_mask, vk::PipelineStageFlags dst_stage_mask)
 {
 	vk::ImageMemoryBarrier barrier{
@@ -154,6 +162,8 @@ void CommandBuffer::set_image_layout(ImageResource &resource, vk::ImageLayout ol
 	                        barrier);
 }
 
+// Helper function that generates image copy regions according to a subresource range.
+// The copy regions include all mipmap levels.
 std::vector<vk::BufferImageCopy> CommandBuffer::full_copy_regions(const vk::ImageSubresourceRange &subresource_range, vk::Extent3D base_extent, uint8_t bits_per_pixel)
 {
 	std::vector<vk::BufferImageCopy> buffer_copy_regions;
@@ -185,11 +195,13 @@ std::vector<vk::BufferImageCopy> CommandBuffer::full_copy_regions(const vk::Imag
 	return buffer_copy_regions;
 }
 
+// Helper function to copy from src to dst. Assume the offsets are 0.
 void CommandBuffer::copy_buffer(Buffer &src, Buffer &dst, size_t size)
 {
 	handle_.copyBuffer(src.get_handle(), dst.get_handle(), vk::BufferCopy{0, 0, size});
 }
 
+// Helper function to copy from src to dst with the given copy region.
 void CommandBuffer::copy_buffer(Buffer &src, Buffer &dst, vk::BufferCopy copy_region)
 {
 	handle_.copyBuffer(src.get_handle(), dst.get_handle(), copy_region);

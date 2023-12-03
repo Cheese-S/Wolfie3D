@@ -11,6 +11,7 @@ class Sampler;
 namespace sg
 {
 
+// Texture component. Directly fowllowing glTF spec.
 class Texture : public Component
 {
   public:

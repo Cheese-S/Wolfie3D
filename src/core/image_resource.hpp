@@ -11,6 +11,7 @@ namespace W3D
 
 struct ImageLoadResult;
 
+// Metadata struct that describes an image. Used during image creation.
 struct ImageMetaInfo
 {
 	vk::Extent3D extent;
@@ -18,6 +19,7 @@ struct ImageMetaInfo
 	uint32_t     levels;
 };
 
+// Contains necessary information to tranfer from a raw image to a vk image.
 struct ImageTransferInfo
 {
 	std::vector<uint8_t> binary;
@@ -29,6 +31,8 @@ ImageTransferInfo gli_load(const std::string &path);
 
 class ImageView;
 
+// Helper class that contains both an image and its view.
+// Offers helper functions to easily load on disk images.
 class ImageResource
 {
   public:

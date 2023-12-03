@@ -6,6 +6,7 @@
 namespace W3D
 {
 
+// Helper function to create a linear clamp sampler create info.
 vk::SamplerCreateInfo Sampler::linear_clamp_cinfo(const PhysicalDevice &physical_device, float max_lod)
 {
 	vk::SamplerCreateInfo sampler_cinfo{
@@ -26,21 +27,25 @@ vk::SamplerCreateInfo Sampler::linear_clamp_cinfo(const PhysicalDevice &physical
 	return sampler_cinfo;
 }
 
+// Create an null sampler
 Sampler::Sampler(const Device &device, std::nullptr_t nptr) :
     device_(device)
 {
 }
 
+// Create a sampler with given create info
 Sampler::Sampler(const Device &device, vk::SamplerCreateInfo &sampler_cinfo) :
     device_(device)
 {
 	handle_ = device_.get_handle().createSampler(sampler_cinfo);
 }
 
+// Move constructor for sampler.
 Sampler::Sampler(Sampler &&rhs) :
     device_(rhs.device_),
     VulkanObject<vk::Sampler>(std::move(rhs)){};
 
+// Destroy sampler if not null
 Sampler::~Sampler()
 {
 	if (handle_)

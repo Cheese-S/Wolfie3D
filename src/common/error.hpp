@@ -6,6 +6,8 @@
 #include "logging.hpp"
 #include "utils.hpp"
 
+// Macros to disable compiler warnings.
+// ! DO NOT USE. ONLY USED TO SUPPRESS LIBRARY WARNINGS.
 #if defined(__clang__)
 // CLANG ENABLE/DISABLE WARNING DEFINITION
 #	define W3D_DISABLE_WARNINGS()                                                     \
@@ -29,6 +31,7 @@
 #	define W3D_ENABLE_WARNINGS() __pragma(warning(pop))
 #endif
 
+// Check to see if the vkResult is vkSuccess.
 #define VK_CHECK(x)                                       \
 	do                                                    \
 	{                                                     \

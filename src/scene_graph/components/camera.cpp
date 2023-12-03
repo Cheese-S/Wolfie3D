@@ -17,7 +17,7 @@ std::type_index Camera::get_type()
 
 void Camera::set_node(Node &node)
 {
-	pNode_ = &node;
+	p_node_ = &node;
 }
 
 void Camera::set_pre_rotation(const glm::mat4 &pre_rotation)
@@ -27,22 +27,17 @@ void Camera::set_pre_rotation(const glm::mat4 &pre_rotation)
 
 glm::mat4 Camera::get_view()
 {
-	if (!pNode_)
+	if (!p_node_)
 	{
 		throw std::runtime_error("Camera component is not attached to a node");
 	}
-	auto &T = pNode_->get_component<Transform>();
+	auto &T = p_node_->get_component<Transform>();
 	return glm::inverse(T.get_world_M());
 }
 
 Node *Camera::get_node()
 {
-	return pNode_;
-}
-
-const glm::mat4 Camera::get_pre_rotation()
-{
-	return pre_rotation_;
+	return p_node_;
 }
 
 }        // namespace W3D::sg

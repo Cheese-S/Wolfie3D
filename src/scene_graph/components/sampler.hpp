@@ -10,6 +10,7 @@ class Device;
 
 namespace sg
 {
+// Component wrapper for sampler.
 class Sampler : public Component
 {
   public:

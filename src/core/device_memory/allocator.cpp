@@ -10,6 +10,8 @@
 
 namespace W3D
 {
+
+// Create the VMA allocator.
 DeviceMemoryAllocator::DeviceMemoryAllocator(Device &device)
 {
 	const Instance        &instance        = device.get_instance();
@@ -29,6 +31,12 @@ DeviceMemoryAllocator::~DeviceMemoryAllocator()
 	vmaDestroyAllocator(handle_);
 }
 
+// All hints (allocation_cinfo.flags & allocation_cinfo.usage) are recommended by VMA.
+// * Refer to https://gpuopen-librariesandsdks.github.io/VulkanMemoryAllocator/html/usage_patterns.html
+
+// Allocate a staging buffer.
+// * A staging buffer is a mapped buffer that we can directly write to.
+// * We then perform GPU-side copy by using it as the src.
 Buffer DeviceMemoryAllocator::allocate_staging_buffer(size_t size) const
 {
 	vk::BufferCreateInfo buffer_cinfo{};
@@ -40,6 +48,8 @@ Buffer DeviceMemoryAllocator::allocate_staging_buffer(size_t size) const
 	return allocate_buffer(buffer_cinfo, allocation_cinfo);
 }
 
+// Allocate a vertex buffer.
+// * A vertex buffer contains vertex information.
 Buffer DeviceMemoryAllocator::allocate_vertex_buffer(size_t size) const
 {
 	vk::BufferCreateInfo buffer_cinfo{};
@@ -51,6 +61,8 @@ Buffer DeviceMemoryAllocator::allocate_vertex_buffer(size_t size) const
 	return allocate_buffer(buffer_cinfo, allocation_cinfo);
 }
 
+// Allocate an index buffer.
+// * An index buffer contains index information.
 Buffer DeviceMemoryAllocator::allocate_index_buffer(size_t size) const
 {
 	vk::BufferCreateInfo buffer_cinfo{};
@@ -62,6 +74,8 @@ Buffer DeviceMemoryAllocator::allocate_index_buffer(size_t size) const
 	return allocate_buffer(buffer_cinfo, allocation_cinfo);
 }
 
+// Allocate an uniform buffer.
+// * W3D uses a mapped uniform buffer so that it can be updated easily.
 Buffer DeviceMemoryAllocator::allocate_uniform_buffer(size_t size) const
 {
 	vk::BufferCreateInfo buffer_cinfo{};
@@ -73,16 +87,19 @@ Buffer DeviceMemoryAllocator::allocate_uniform_buffer(size_t size) const
 	return allocate_buffer(buffer_cinfo, allocation_cinfo);
 }
 
+// Helper function to invoke buffer constructor.
 Buffer DeviceMemoryAllocator::allocate_buffer(vk::BufferCreateInfo &buffer_cinfo, VmaAllocationCreateInfo &allocation_cinfo) const
 {
 	return Buffer(Key<DeviceMemoryAllocator>{}, handle_, buffer_cinfo, allocation_cinfo);
 }
 
+// Allocate a null buffer.
 Buffer DeviceMemoryAllocator::allocate_null_buffer() const
 {
 	return Buffer(Key<DeviceMemoryAllocator>{}, handle_, nullptr);
 }
 
+// Allocate Image that will only be used on GPU.
 Image DeviceMemoryAllocator::allocate_device_only_image(vk::ImageCreateInfo &image_cinfo) const
 {
 	VmaAllocationCreateInfo allocation_cinfo{};
@@ -92,11 +109,13 @@ Image DeviceMemoryAllocator::allocate_device_only_image(vk::ImageCreateInfo &ima
 	return allocate_image(image_cinfo, allocation_cinfo);
 }
 
+// Allocate vkImage and the memory associated with it.
 Image DeviceMemoryAllocator::allocate_image(vk::ImageCreateInfo &image_cinfo, VmaAllocationCreateInfo &allocation_cinfo) const
 {
 	return Image(Key<DeviceMemoryAllocator>{}, handle_, image_cinfo, allocation_cinfo);
 }
 
+// Allocate null image.
 Image DeviceMemoryAllocator::allocate_null_image() const
 {
 	return Image(Key<DeviceMemoryAllocator>{}, handle_, nullptr);

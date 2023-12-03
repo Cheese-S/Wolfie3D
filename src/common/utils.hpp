@@ -13,13 +13,16 @@ enum class Format;
 namespace W3D
 {
 
+// Common helper functions that can be used anywhere.
+
 namespace sg
 {
 class Scene;
 class Node;
 }        // namespace sg
 
-// PassKey idiom. See https://stackoverflow.com/questions/3217390/clean-c-granular-friend-equivalent-answer-attorney-client-idiom/3218920#3218920
+// PassKey idiom.
+// See https://stackoverflow.com/questions/3217390/clean-c-granular-friend-equivalent-answer-attorney-client-idiom/3218920#3218920
 template <typename T>
 class Key
 {
@@ -28,6 +31,8 @@ class Key
 	Key(Key const &){};
 };
 
+// Convert a numeric type T to u32
+// * Vulkan expects most things to be in u32.
 template <typename T>
 inline uint32_t to_u32(T value)
 {
@@ -41,6 +46,8 @@ inline uint32_t to_u32(T value)
 	return static_cast<uint32_t>(value);
 }
 
+// Convert a T pointer to uint8_t pointer
+// ! Unsafe
 template <typename T>
 inline uint8_t *to_ubyte_ptr(T *value)
 {

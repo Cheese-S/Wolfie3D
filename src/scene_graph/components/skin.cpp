@@ -10,9 +10,11 @@ namespace W3D::sg
 Skin::Skin(const std::string &name) :
     Component(name){};
 
+// Calculate all the joint matrices
 void Skin::compute_joint_Ms(sg::Scene &scene, glm::mat4 *p_joint_Ms) const
 {
 	std::vector<sg::Node *> p_nodes = scene.get_nodes();
+	// We need to multiply the IBMs to first convert submesh to bone CS.
 	for (int joint_id = 0; joint_id < joint_node_map_.size(); joint_id++)
 	{
 		Node *p_node         = p_nodes[joint_node_map_.at(joint_id)];

@@ -11,6 +11,8 @@ class Device;
 class Image;
 class Buffer;
 
+// RAII Wrapper around VMA allocator.
+// Provide functions that allocate a certain type of buffer.
 class DeviceMemoryAllocator : public VulkanObject<VmaAllocator>
 {
   public:

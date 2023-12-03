@@ -22,12 +22,15 @@ uint8_t ImageResource::format_to_bits_per_pixel(vk::Format format)
 	return conversion_map[format];
 }
 
+// Load an on disk 2d image.
 ImageTransferInfo ImageResource::load_two_dim_image(const std::string &path)
 {
 	// We only use stb now, but we can add more later
 	return stb_load(path);
 };
 
+// Create an EMPTY image resource with given metainfo.
+// * The vkImage contains random bytes. It NEEDS to be updated.
 ImageResource ImageResource::create_empty_two_dim_img_resrc(const Device &device, const ImageMetaInfo &meta)
 {
 	vk::ImageCreateInfo img_cinfo{
@@ -50,6 +53,7 @@ ImageResource ImageResource::create_empty_two_dim_img_resrc(const Device &device
 	return resource;
 }
 
+// using stb to load a 2d image.
 ImageTransferInfo stb_load(const std::string &path)
 {
 	std::string extension = fu::get_file_extension(path);
@@ -59,6 +63,7 @@ ImageTransferInfo stb_load(const std::string &path)
 		abort();
 	}
 
+	// We require the image to be in rgba format.
 	std::vector<uint8_t> raw_binary = fu::read_binary(path);
 	int                  size       = raw_binary.size();
 	int                  width, height;
@@ -72,6 +77,7 @@ ImageTransferInfo stb_load(const std::string &path)
 		LOGE("Failure to load convert raw binary to image binary: {}", stbi_failure_reason());
 	}
 
+	// Copy raw bytes to our array.
 	std::vector<uint8_t> img_binary = {p_img_data, p_img_data + size};
 
 	stbi_image_free(p_img_data);
@@ -90,11 +96,13 @@ ImageTransferInfo stb_load(const std::string &path)
 	};
 }
 
+// Load a cubic image using gli
 ImageTransferInfo ImageResource::load_cubic_image(const std::string &path)
 {
 	return gli_load(path);
 }
 
+// Similar to the 2D case. Create an EMPTY image resource.
 ImageResource ImageResource::create_empty_cubic_img_resrc(const Device &device, const ImageMetaInfo &meta)
 {
 	vk::ImageCreateInfo img_cinfo{
@@ -118,6 +126,7 @@ ImageResource ImageResource::create_empty_cubic_img_resrc(const Device &device, 
 	return resource;
 }
 
+// using gli to load cubic image
 ImageTransferInfo gli_load(const std::string &path)
 {
 	static const std::unordered_map<gli::format, vk::Format> gli_to_vk_format_map = {
@@ -143,6 +152,7 @@ ImageTransferInfo gli_load(const std::string &path)
 		abort();
 	}
 
+	// Copy the raw bytes into our own array
 	std::vector<std::uint8_t> img_binary{gli_cube.data<uint8_t>(), gli_cube.data<uint8_t>() + gli_cube.size()};
 
 	return {
@@ -159,24 +169,29 @@ ImageTransferInfo gli_load(const std::string &path)
 	};
 }
 
+// Create NULL image resource
 ImageResource::ImageResource(const Device &device, std::nullptr_t nptr) :
     image_(device.get_device_memory_allocator().allocate_null_image()),
     view_(device, nptr)
 {
 }
 
+// Constructor with right reference image and view.
+// * The image and view will "move" their resource to this newly created ImageResource instance.
 ImageResource::ImageResource(Image &&image, ImageView &&view) :
     image_(std::move(image)),
     view_(std::move(view)){
 
     };
 
+// Move constructor
 ImageResource::ImageResource(ImageResource &&rhs) :
     image_(std::move(rhs.image_)),
     view_(std::move(rhs.view_))
 {
 }
 
+// Move assignment operator.
 ImageResource &ImageResource::operator=(ImageResource &&rhs)
 {
 	image_ = std::move(rhs.image_);
@@ -184,6 +199,7 @@ ImageResource &ImageResource::operator=(ImageResource &&rhs)
 	return *this;
 };
 
+// Image and ImageView handles their own destruction.
 ImageResource::~ImageResource(){};
 
 Image &ImageResource::get_image()

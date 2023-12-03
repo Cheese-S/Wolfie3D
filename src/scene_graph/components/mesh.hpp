@@ -9,6 +9,9 @@
 namespace W3D::sg
 {
 class SubMesh;
+
+// Mesh Component.
+// Has an AABB, pointers to its submeshes and pointers to nodes that refers to it.
 class Mesh : public Component
 {
   public:

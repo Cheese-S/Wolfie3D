@@ -4,11 +4,8 @@
 
 namespace W3D
 {
-Fence::Fence(Device &device, std::nullptr_t nptr) :
-    device_(device)
-{
-}
 
+// Create a fence with given flags
 Fence::Fence(Device &device, vk::FenceCreateFlags flags) :
     device_(device)
 {
@@ -18,18 +15,18 @@ Fence::Fence(Device &device, vk::FenceCreateFlags flags) :
 	handle_ = device_.get_handle().createFence(fence_cinfo);
 }
 
+// Move constructor for Fence
 Fence::Fence(Fence &&rhs) :
     VulkanObject(std::move(rhs)),
     device_(rhs.device_){};
 
+// Fence clean up
 Fence::~Fence()
 {
-	if (handle_)
-	{
-		device_.get_handle().destroyFence(handle_);
-	}
+	device_.get_handle().destroyFence(handle_);
 }
 
+// Create a default semaphore
 Semaphore::Semaphore(Device &device) :
     device_(device)
 {
@@ -37,18 +34,17 @@ Semaphore::Semaphore(Device &device) :
 	handle_ = device_.get_handle().createSemaphore(semaphore_cinfo);
 }
 
+// Move constructor for Semaphore
 Semaphore::Semaphore(Semaphore &&rhs) :
     VulkanObject(std::move(rhs)),
     device_(rhs.device_)
 {
 }
 
+// Semaphore clean up
 Semaphore::~Semaphore()
 {
-	if (handle_)
-	{
-		device_.get_handle().destroySemaphore(handle_);
-	}
+	device_.get_handle().destroySemaphore(handle_);
 }
 
 }        // namespace W3D

@@ -7,6 +7,8 @@
 namespace W3D::sg
 {
 
+// An abstract script class. It should update some state given a delta time.
+// The update function is called each frame.
 class Script : public Component
 {
   public:
@@ -20,6 +22,8 @@ class Script : public Component
 	virtual void resize(uint32_t width, uint32_t height);
 };
 
+// An abstract script class.
+// * NodeScript refers to a node but Script does not.
 class NodeScript : public Script
 {
   public:

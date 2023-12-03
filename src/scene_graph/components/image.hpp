@@ -13,6 +13,7 @@ class Device;
 
 namespace sg
 {
+// Image Component. Wraps around an image resource.
 class Image : public Component
 {
   public:
@@ -22,8 +23,7 @@ class Image : public Component
 	virtual ~Image() = default;
 	virtual std::type_index get_type() override;
 
-	ImageResource           &get_resource();
-	const ImageTransferInfo &get_image_transfer_info();
+	ImageResource &get_resource();
 
 	void set_resource(ImageResource &&resource);
 

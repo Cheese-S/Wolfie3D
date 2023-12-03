@@ -10,6 +10,8 @@ namespace W3D
 template <typename T>
 class Key;
 
+// RAII wrapper for vkImage and its memory.
+// * All images in our application need to be allocated through the allocator.
 class Image : public DeviceMemoryObject<vk::Image>
 {
   public:

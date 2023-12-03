@@ -6,6 +6,9 @@
 namespace W3D
 {
 class Device;
+
+// RAII wrapper for vkImageView
+// ImageView describes how an image should be accessed.
 class ImageView : public VulkanObject<vk::ImageView>
 {
   public:

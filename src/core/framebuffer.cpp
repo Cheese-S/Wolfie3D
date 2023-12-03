@@ -10,20 +10,20 @@
 namespace W3D
 {
 
+// create vkFramebuffer with the given create info
 Framebuffer::Framebuffer(Device &device, vk::FramebufferCreateInfo framebuffer_cinfo) :
     device_(device)
 {
 	handle_ = device_.get_handle().createFramebuffer(framebuffer_cinfo);
 }
 
+// Cleanup.
 Framebuffer::~Framebuffer()
 {
-	if (handle_)
-	{
-		device_.get_handle().destroyFramebuffer(handle_);
-	}
+	device_.get_handle().destroyFramebuffer(handle_);
 }
 
+// Build the framebuffers with a given swapchain and a given renderpass.
 SwapchainFramebuffer::SwapchainFramebuffer(Device &device, Swapchain &swapchain, RenderPass &render_pass) :
     device_(device),
     swapchain_(swapchain),
@@ -32,11 +32,13 @@ SwapchainFramebuffer::SwapchainFramebuffer(Device &device, Swapchain &swapchain,
 	build();
 }
 
+// Cleanup
 SwapchainFramebuffer::~SwapchainFramebuffer()
 {
 	cleanup();
 }
 
+// We only need to take care of the framebuffers. The imageviews are managed by the swapchain.
 void SwapchainFramebuffer::cleanup()
 {
 	for (vk::Framebuffer framebuffer : framebuffers_)
@@ -52,12 +54,16 @@ void SwapchainFramebuffer::rebuild()
 	build();
 }
 
+// Create the framebuffers.
 void SwapchainFramebuffer::build()
 {
+	// We use the color image views and depth image view from the swapchain.
 	const std::vector<ImageView> &frame_image_views = swapchain_.get_frame_image_views();
 	const ImageView              &depth_image_view  = swapchain_.get_depth_resource().get_view();
 	vk::Extent2D                  extent            = swapchain_.get_swapchain_properties().extent;
 
+	// Use the same depth image for every framebuffer.
+	// *We synchronize rendring so that we don't accidentally overwrite the depth buffer.
 	std::array<vk::ImageView, 2> attachments;
 	vk::FramebufferCreateInfo    framebuffer_cinfo{
 	       .renderPass      = render_pass_.get_handle(),

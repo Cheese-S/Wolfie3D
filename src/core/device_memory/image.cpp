@@ -6,12 +6,14 @@
 namespace W3D
 {
 
+// Create a null image.
 Image::Image(Key<DeviceMemoryAllocator> key, VmaAllocator allocator, std::nullptr_t nptr) :
     DeviceMemoryObject(allocator, key)
 {
 	handle_ = nullptr;
 }
 
+// Allocate the vkImage and the memory for the image.
 Image::Image(Key<DeviceMemoryAllocator> key, VmaAllocator allocator, vk::ImageCreateInfo &image_cinfo, VmaAllocationCreateInfo &allocation_cinfo) :
     DeviceMemoryObject(allocator, key),
     base_extent_(image_cinfo.extent),
@@ -23,6 +25,7 @@ Image::Image(Key<DeviceMemoryAllocator> key, VmaAllocator allocator, vk::ImageCr
 	handle_ = c_image_handle;
 }
 
+// Destroy both the image and the memory for it if not null.
 Image::~Image()
 {
 	if (handle_)

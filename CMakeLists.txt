@@ -60,16 +60,12 @@ target_sources(${PROJECT_NAME} PRIVATE
     src/core/instance.hpp
     src/core/physical_device.cpp
     src/core/physical_device.hpp
-    src/core/pipeline_layout.cpp
-    src/core/pipeline_layout.hpp
     src/core/render_pass.cpp
     src/core/render_pass.hpp
     src/core/renderer.cpp
     src/core/renderer.hpp
     src/core/sampler.cpp
     src/core/sampler.hpp
-    src/core/surface.cpp
-    src/core/surface.hpp
     src/core/swapchain.cpp
     src/core/swapchain.hpp
     src/core/sync_objects.cpp

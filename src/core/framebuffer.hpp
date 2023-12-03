@@ -8,6 +8,8 @@ class Device;
 class Swapchain;
 class RenderPass;
 
+// Wrapper for vkFramebuffer
+// Framebuffer associates renderpass and attachments together.
 class Framebuffer : public VulkanObject<vk::Framebuffer>
 {
   public:
@@ -18,6 +20,8 @@ class Framebuffer : public VulkanObject<vk::Framebuffer>
 	Device &device_;
 };
 
+// Wrapper for vkFramebuffers.
+// *This class is coupled with a swapchain and a renderpass. It handles the creation / rebuild for framebuffers that uses images from the swapchain.
 class SwapchainFramebuffer
 {
   public:

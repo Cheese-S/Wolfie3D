@@ -14,6 +14,11 @@ class DeviceMemoryAllocator;
 class CommandPool;
 class CommandBuffer;
 
+// RAII wrapper for vkDevice.
+// This class also manages queues and device memory allocator.
+// This is the logical representation for a physical device.
+// We offer a graphics queue cmd pool for one time cmd buf along with it.
+// ? (It might be better to decouple this from the device).
 class Device : public VulkanObject<typename vk::Device>
 {
   public:

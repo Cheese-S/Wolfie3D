@@ -35,6 +35,10 @@ struct Vertex;
 
 struct ImageTransferInfo;
 
+// Loader class responsible for loading gltf file.
+// This class relies on tinygltf to read the gltf file.
+// Then, we parse the tinygltf structure and produce our own scene representation.
+// For better understanding of GLTF, refer to https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html
 class GLTFLoader
 {
   public:
@@ -95,6 +99,7 @@ class GLTFLoader
 	void             init_node_hierarchy(tinygltf::Scene *p_gltf_scene, std::vector<std::unique_ptr<sg::Node>> &p_nodes, sg::Node &root);
 	void             init_scene_bound();
 
+	// POD struct that describes how to read p_data.
 	template <typename T>
 	struct DataAccessInfo
 	{
@@ -102,6 +107,7 @@ class GLTFLoader
 		size_t   stride;        // This is stride is not BYTE stride, but T stride.
 	};
 
+	// Get an accessor's data.
 	template <typename T>
 	DataAccessInfo<T> get_attr_data_ptr(const tinygltf::Primitive &submesh, const char *name) const
 	{
@@ -116,6 +122,7 @@ class GLTFLoader
 		return get_accessor_data_ptr<T>(it->second);
 	}
 
+	// Read the accessor data as specified by the spec.
 	template <typename T>
 	DataAccessInfo<T> get_accessor_data_ptr(int accessor_id) const
 	{

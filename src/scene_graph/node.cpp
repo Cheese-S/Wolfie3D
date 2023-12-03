@@ -10,11 +10,14 @@ Node::Node(const size_t id, const std::string &name) :
 	set_component(T_);
 }
 
+// Add a child node.
 void Node::add_child(Node &child)
 {
 	children_.push_back(&child);
 }
 
+// Set a node as parent.
+// invalidate the world_M since the cached world_M did not consider parent's transform.
 void Node::set_parent(Node &parent)
 {
 	parent_ = &parent;

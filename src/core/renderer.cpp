@@ -36,9 +36,10 @@
 
 namespace W3D
 {
-const uint32_t Renderer::NUM_INFLIGHT_FRAMES  = 2;
-const uint32_t Renderer::IRRADIANCE_DIMENSION = 2;
+const uint32_t Renderer::NUM_INFLIGHT_FRAMES = 2;
 
+// Renderer Constructor.
+// * Order matter in this construction.
 Renderer::Renderer()
 {
 	p_window_ = std::make_unique<Window>("Wolfie3D");
@@ -57,14 +58,17 @@ Renderer::Renderer()
 
 Renderer::~Renderer(){};
 
+// Enter the main loop.
 void Renderer::start()
 {
 	main_loop();
 	timer_.start();
 }
 
+// Main render loop.
 void Renderer::main_loop()
 {
+	// When the window is closed, jump out the loop.
 	while (!p_window_->should_close())
 	{
 		timer_.tick();
@@ -72,9 +76,12 @@ void Renderer::main_loop()
 		update();
 		p_window_->poll_events();
 	}
+
+	// Wait for all operations in device to end.
 	p_device_->get_handle().waitIdle();
 }
 
+// Ask all scripts to update.
 void Renderer::update()
 {
 	double delta_time = timer_.tick();
@@ -89,6 +96,7 @@ void Renderer::update()
 	}
 }
 
+// Render frame.
 void Renderer::render_frame()
 {
 	uint32_t img_idx = sync_acquire_next_image();
@@ -98,6 +106,8 @@ void Renderer::render_frame()
 	frame_idx_ = (frame_idx_ + 1) % NUM_INFLIGHT_FRAMES;
 }
 
+// Acquire the next swapchain image that we can render to.
+// Return an idx that refers to swapchain images.
 uint32_t Renderer::sync_acquire_next_image()
 {
 	FrameResource &frame    = get_current_frame_resource();
@@ -106,6 +116,7 @@ uint32_t Renderer::sync_acquire_next_image()
 
 	while (true)
 	{
+		// Wait for the GPU to tell us that the previous frame has finished rendering.
 		while (vk::Result::eTimeout ==
 		       device_h.waitForFences({frame.in_flight_fence.get_handle()}, true, UINT64_MAX))
 		{
@@ -115,8 +126,10 @@ uint32_t Renderer::sync_acquire_next_image()
 		// Opted for plain vkAacquireNextImageKHR here because we want to deal with the error ourselves.
 		// Otherwise, vulkan.hpp would've thrown the error and we have to catch it (slow).
 		// See, https://github.com/KhronosGroup/Vulkan-Hpp/issues/599
+		// Signal the image_avaliable_semaphore. Telling the GPU that it's now safe to render to that image.
 		vk::Result acquired_res = static_cast<vk::Result>(vkAcquireNextImageKHR(device_h, p_swapchain_->get_handle(), UINT64_MAX, frame.image_avaliable_semaphore.get_handle(), VK_NULL_HANDLE, &img_idx));
 
+		// If the window's size has changed.
 		if (acquired_res == vk::Result::eErrorOutOfDateKHR)
 		{
 			resize();
@@ -137,25 +150,33 @@ uint32_t Renderer::sync_acquire_next_image()
 	return img_idx;
 };
 
+// Submit the draw commands associated with the current frame.
 void Renderer::sync_submit_commands()
 {
 	FrameResource         &frame       = get_current_frame_resource();
 	vk::PipelineStageFlags wait_stages = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-	vk::SubmitInfo         submit_info{
-	            .waitSemaphoreCount   = 1,
-	            .pWaitSemaphores      = &frame.image_avaliable_semaphore.get_handle(),
-	            .pWaitDstStageMask    = &wait_stages,
-	            .commandBufferCount   = 1,
-	            .pCommandBuffers      = &frame.cmd_buf.get_handle(),
-	            .signalSemaphoreCount = 1,
-	            .pSignalSemaphores    = &frame.render_finished_semaphore.get_handle(),
-    };
+	// The command buffer wait for the image_avaliable_semaphore.
+	// Start executing the commands.
+	// Signal the render_finished_semaphore when we finished rendering.
+	vk::SubmitInfo submit_info{
+	    .waitSemaphoreCount   = 1,
+	    .pWaitSemaphores      = &frame.image_avaliable_semaphore.get_handle(),
+	    .pWaitDstStageMask    = &wait_stages,
+	    .commandBufferCount   = 1,
+	    .pCommandBuffers      = &frame.cmd_buf.get_handle(),
+	    .signalSemaphoreCount = 1,
+	    .pSignalSemaphores    = &frame.render_finished_semaphore.get_handle(),
+	};
+	// Telling the CPU that commands has finished executing on the GPU.
 	p_device_->get_graphics_queue().submit(submit_info, frame.in_flight_fence.get_handle());
 }
 
+// Present the images.
 void Renderer::sync_present(uint32_t img_idx)
 {
-	FrameResource     &frame = get_current_frame_resource();
+	FrameResource &frame = get_current_frame_resource();
+	// Wait for the rendering to finish.
+	// Then, we can present.
 	vk::PresentInfoKHR present_info{
 	    .waitSemaphoreCount = 1,
 	    .pWaitSemaphores    = &frame.render_finished_semaphore.get_handle(),
@@ -181,8 +202,10 @@ void Renderer::sync_present(uint32_t img_idx)
 	}
 }
 
+// Process resize.
 void Renderer::resize()
 {
+	// Only resize when the extent is not zero. (When the window is visible)
 	vk::Extent2D extent = p_window_->wait_for_non_zero_extent();
 	p_device_->get_handle().waitIdle();
 	p_swapchain_->rebuild(p_window_->get_extent());
@@ -190,6 +213,7 @@ void Renderer::resize()
 	p_camera_node_->get_component<sg::Script>().resize(extent.width, extent.height);
 }
 
+// Helper functions that call other draw functions.
 void Renderer::record_draw_commands(uint32_t img_idx)
 {
 	CommandBuffer &cmd_buf = get_current_frame_resource().cmd_buf;
@@ -204,6 +228,7 @@ void Renderer::record_draw_commands(uint32_t img_idx)
 	cmd_buf.get_handle().end();
 }
 
+// Update the camera uniform buffer.
 void Renderer::update_camera_ubo()
 {
 	sg::Camera &camera = p_camera_node_->get_component<sg::Camera>();
@@ -217,6 +242,7 @@ void Renderer::update_camera_ubo()
 	buf.update(&ubo, sizeof(ubo));
 }
 
+// Specify the viewport and the scissor.
 void Renderer::set_dynamic_states(CommandBuffer &cmd_buf)
 {
 	vk::Extent2D swapchain_extent = p_swapchain_->get_swapchain_properties().extent;
@@ -240,11 +266,14 @@ void Renderer::set_dynamic_states(CommandBuffer &cmd_buf)
 	cmd_buf.get_handle().setScissor(0, scissor);
 }
 
+// Start the render pass.
 void Renderer::begin_render_pass(CommandBuffer &cmd_buf, vk::Framebuffer framebuffer)
 {
+	// Specify the clear value for both color and depth attachment.
 	std::array<vk::ClearValue, 2> clear_values{
 	    std::array<float, 4>{0.54f, 0.81f, 0.94f, 1.0f},
 	};
+	// All depth value are defaulted to 1.
 	clear_values[1].depthStencil = vk::ClearDepthStencilValue{1.0f, 0};
 
 	vk::RenderPassBeginInfo render_pass_binfo{
@@ -264,6 +293,7 @@ void Renderer::begin_render_pass(CommandBuffer &cmd_buf, vk::Framebuffer framebu
 	cmd_buf.get_handle().beginRenderPass(render_pass_binfo, vk::SubpassContents::eInline);
 }
 
+// Draw the skybox.
 void Renderer::draw_skybox(CommandBuffer &cmd_buf)
 {
 	sg::Camera    &camera = p_camera_node_->get_component<sg::Camera>();
@@ -272,6 +302,9 @@ void Renderer::draw_skybox(CommandBuffer &cmd_buf)
 	         .proj = camera.get_projection(),
 	         .view = camera.get_view(),
     };
+	// Bind the pipeline.
+	// Pass in information the shader needs (Bind descriptor sets, push constant)
+	// Actually draw the submesh
 	cmd_buf.get_handle().bindPipeline(
 	    vk::PipelineBindPoint::eGraphics,
 	    skybox_.p_pl->get_handle());
@@ -289,12 +322,15 @@ void Renderer::draw_skybox(CommandBuffer &cmd_buf)
 	draw_submesh(cmd_buf, *baked_pbr_.p_box);
 }        // namespace W3D
 
+// Draw the scene.
 void Renderer::draw_scene(CommandBuffer &cmd_buf)
 {
 	vk::PipelineLayout pl_layout = pbr_.p_pl->get_pipeline_layout();
 	cmd_buf.get_handle().bindPipeline(
 	    vk::PipelineBindPoint::eGraphics,
 	    pbr_.p_pl->get_handle());
+	// Bind the global descriptor set (All the PBRTexture)
+	// This does not need to change per object.
 	cmd_buf.get_handle().bindDescriptorSets(
 	    vk::PipelineBindPoint::eGraphics,
 	    pbr_.p_pl->get_pipeline_layout(),
@@ -302,6 +338,7 @@ void Renderer::draw_scene(CommandBuffer &cmd_buf)
 	    get_current_frame_resource().pbr_set,
 	    {});
 
+	// Traverse the node tree structure and render them.
 	std::queue<sg::Node *> p_nodes;
 	p_nodes.push(&p_scene_->get_root_node());
 	while (!p_nodes.empty())
@@ -319,10 +356,12 @@ void Renderer::draw_scene(CommandBuffer &cmd_buf)
 	}
 }
 
+// Draw a node.
 void Renderer::draw_node(CommandBuffer &cmd_buf, sg::Node &node)
 {
 	if (node.has_component<sg::Mesh>())
 	{
+		// Bind the skin if there is one.
 		if (node.has_component<sg::Skin>())
 		{
 			bind_skin(cmd_buf, node.get_component<sg::Skin>());
@@ -332,44 +371,45 @@ void Renderer::draw_node(CommandBuffer &cmd_buf, sg::Node &node)
 			disable_skin(cmd_buf);
 		}
 
+		// Push the world matrix.
 		PBRPCO pbr_pco{
 		    .model = node.get_transform().get_world_M(),
 		};
+
+		// Draw submeshes
 		std::vector<sg::SubMesh *> p_submeshs = node.get_component<sg::Mesh>().get_p_submeshs();
 		for (sg::SubMesh *p_submesh : p_submeshs)
 		{
 			const sg::PBRMaterial *p_pbr_material = dynamic_cast<const sg::PBRMaterial *>(p_submesh->get_material());
+			// Bind the material.
+			// * The pbr_pco will be updated in bind_material. That's why we need to call push constant per submesh.
+			// * A matrure implementation would sort submesh by material to reduce the amount of bind_material call.
 			bind_material(cmd_buf, *p_pbr_material, pbr_pco);
-			pbr_pco.material_flag = p_pbr_material->flag;
+			pbr_pco.material_flag = p_pbr_material->flag_;
 			cmd_buf.get_handle().pushConstants<PBRPCO>(pbr_.p_pl->get_pipeline_layout(), vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment, 0, pbr_pco);
 			draw_submesh(cmd_buf, *p_submesh);
 		}
 	}
 }
 
-void Renderer::push_node_model_matrix(CommandBuffer &cmd_buf, sg::Node &node)
-{
-	glm::mat4 rotated_m = node.get_transform().get_world_M();
-	PBRPCO    pco       = {
-	             .model = rotated_m,
-    };
-	cmd_buf.get_handle().pushConstants<PBRPCO>(pbr_.p_pl->get_pipeline_layout(), vk::ShaderStageFlagBits::eVertex, 0, pco);
-}
-
+// Bind the material.
 void Renderer::bind_material(CommandBuffer &cmd_buf, const sg::PBRMaterial &material, PBRPCO &pco)
 {
-	pco.material_flag        = material.flag;
+	// Update the material constants.
+	pco.material_flag        = material.flag_;
 	pco.base_color           = material.base_color_factor_;
-	pco.metallic_roughness.g = material.roughness_factor;
-	pco.metallic_roughness.b = material.metallic_factor;
+	pco.metallic_roughness.g = material.roughness_factor_;
+	pco.metallic_roughness.b = material.metallic_factor_;
+	// Bind the per-submesh descriptor set.
 	cmd_buf.get_handle().bindDescriptorSets(
 	    vk::PipelineBindPoint::eGraphics,
 	    pbr_.p_pl->get_pipeline_layout(),
 	    1,
-	    material.set,
+	    material.set_,
 	    {});
 }
 
+// Bind the skin.
 void Renderer::bind_skin(CommandBuffer &cmd_buf, const sg::Skin &skin)
 {
 	Buffer &buf = get_current_frame_resource().joint_buf;
@@ -380,9 +420,11 @@ void Renderer::bind_skin(CommandBuffer &cmd_buf, const sg::Skin &skin)
 
 	skin.compute_joint_Ms(*p_scene_, ubo.joint_Ms);
 
+	// update the joint uniform buffer
 	buf.update(&ubo, sizeof(ubo));
 }
 
+// Disable the skin.
 void Renderer::disable_skin(CommandBuffer &cmd_buf)
 {
 	Buffer &buf        = get_current_frame_resource().joint_buf;
@@ -390,9 +432,13 @@ void Renderer::disable_skin(CommandBuffer &cmd_buf)
 	buf.update(&is_skinned, sizeof(is_skinned), offsetof(JointUBO, is_skinned));
 }
 
+// Draw commands for the submesh
 void Renderer::draw_submesh(CommandBuffer &cmd_buf, sg::SubMesh &submesh)
 {
+	// Vertex buffers are always present.
 	cmd_buf.get_handle().bindVertexBuffers(0, submesh.p_vertex_buf_->get_handle(), {0});
+
+	// Bind the idx buf if there is one.
 	if (submesh.p_idx_buf_)
 	{
 		cmd_buf.get_handle().bindIndexBuffer(submesh.p_idx_buf_->get_handle(), 0, vk::IndexType::eUint32);
@@ -409,6 +455,7 @@ Renderer::FrameResource &Renderer::get_current_frame_resource()
 	return frame_resources_[frame_idx_];
 };
 
+// Process events generated by window callbacks.
 void Renderer::process_event(const Event &event)
 {
 	if (event.type == EventType::eResize)
@@ -425,6 +472,8 @@ void Renderer::process_event(const Event &event)
 	}
 }
 
+// load a scene.
+// We add a default arc ball camera.
 void Renderer::load_scene(const char *scene_name)
 {
 	GLTFLoader loader(*p_device_);
@@ -434,20 +483,24 @@ void Renderer::load_scene(const char *scene_name)
 	p_camera_node_             = add_arc_ball_camera_script(*p_scene_, "main_camera", window_extent.width, window_extent.height);
 }
 
+// Bake the IBL resources.
 void Renderer::create_pbr_resources()
 {
 	PBRBaker baker(*p_device_);
 	baked_pbr_ = baker.bake();
 }
 
+// Helper function that call other resource creation functions.
 void Renderer::create_rendering_resources()
 {
 	create_frame_resources();
+	// * We need to create the decriptors first so that we have the descriptor layout for pipeline layout.
 	create_descriptor_resources();
 	create_render_pass();
 	create_pipeline_resources();
 }
 
+// Create per frame resource.
 void Renderer::create_frame_resources()
 {
 	for (uint32_t i = 0; i < NUM_INFLIGHT_FRAMES; i++)
@@ -463,6 +516,7 @@ void Renderer::create_frame_resources()
 	}
 }
 
+// Create all descriptors.
 void Renderer::create_descriptor_resources()
 {
 	create_pbr_desc_resources();
@@ -470,6 +524,7 @@ void Renderer::create_descriptor_resources()
 	create_materials_desc_resources();
 }
 
+// Create pbr descriptor sets.
 void Renderer::create_pbr_desc_resources()
 {
 	vk::DescriptorImageInfo irradiance{
@@ -513,11 +568,13 @@ void Renderer::create_pbr_desc_resources()
 		        .bind_image(4, brdf_lut, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eFragment)
 		        .build();
 
-		frame_resources_[i].pbr_set                            = allocation.set;
+		frame_resources_[i].pbr_set = allocation.set;
+		// We are assigning the same set layout twice here. But, it doesn't matter.
 		pbr_.desc_layout_ring[DescriptorRingAccessor::eGlobal] = allocation.set_layout;
 	}
 }
 
+// Create skybox descriptor resource.
 void Renderer::create_skybox_desc_resources()
 {
 	vk::DescriptorImageInfo background{
@@ -533,13 +590,17 @@ void Renderer::create_skybox_desc_resources()
 		        .bind_image(0, background, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eFragment)
 		        .build();
 
-		frame_resources_[i].skybox_set                            = skybox_allocation.set;
+		frame_resources_[i].skybox_set = skybox_allocation.set;
+		// We are assigning the same set layout twice here. But, it doesn't matter.
 		skybox_.desc_layout_ring[DescriptorRingAccessor::eGlobal] = skybox_allocation.set_layout;
 	}
 }
 
+// Allocate a descriptor set for every material.
 void Renderer::create_materials_desc_resources()
 {
+	// All texture names are converted into snake case when they are loaded by gltfloader.
+	// Therefore, it's safe to query by name.
 	static const std::vector<std::string> pbr_texture_names = {
 	    "base_color_texture",
 	    "normal_texture",
@@ -558,6 +619,7 @@ void Renderer::create_materials_desc_resources()
 		std::vector<vk::DescriptorImageInfo> desc_iinfos;
 		desc_iinfos.reserve(pbr_texture_names.size());
 
+		// Bind the default texture if we can't find one with specified name.
 		for (int i = 0; i < pbr_texture_names.size(); i++)
 		{
 			const std::string &name      = pbr_texture_names[i];
@@ -577,11 +639,14 @@ void Renderer::create_materials_desc_resources()
 
 		DescriptorAllocation desc_allocation = builder.build();
 
-		p_material->set                                          = desc_allocation.set;
+		p_material->set_ = desc_allocation.set;
+		// We are assigning the same set layout twice here. But, it doesn't matter.
 		pbr_.desc_layout_ring[DescriptorRingAccessor::eMaterial] = desc_allocation.set_layout;
 	}
 }
 
+// Create a renderpass with a color attachment and a depth attachment.
+// * This is only a sensible default.
 void Renderer::create_render_pass()
 {
 	std::array<vk::AttachmentDescription, 2> attachemnts;
@@ -631,6 +696,7 @@ void Renderer::create_render_pass()
 	p_render_pass_ = std::make_unique<RenderPass>(*p_device_, render_pass_cinfo);
 }
 
+// Create the pipelines
 void Renderer::create_pipeline_resources()
 {
 	std::array<vk::VertexInputBindingDescription, 1> binding_descriptions;
@@ -639,6 +705,7 @@ void Renderer::create_pipeline_resources()
 	    .stride    = sizeof(sg::Vertex),
 	    .inputRate = vk::VertexInputRate::eVertex,
 	};
+	// The pbr pipeline.
 	GraphicsPipelineState pl_state{
 	    .vert_shader_name   = "pbr.vert.spv",
 	    .frag_shader_name   = "pbr.frag.spv",
@@ -663,6 +730,7 @@ void Renderer::create_pipeline_resources()
 
 	pbr_.p_pl = std::make_unique<GraphicsPipeline>(*p_device_, *p_render_pass_, pl_state, pbr_pl_layout_cinfo);
 
+	// Skybox pipeline creation
 	vk::PushConstantRange skybox_push_const_range{
 	    .stageFlags = vk::ShaderStageFlagBits::eVertex,
 	    .offset     = 0,
@@ -674,6 +742,8 @@ void Renderer::create_pipeline_resources()
 	    .pushConstantRangeCount = 1,
 	    .pPushConstantRanges    = &skybox_push_const_range,
 	};
+	// We reuse some of the state in pbr pipeline.
+	// Since our camera is inside the skybox, we disable back culling.
 	pl_state.vert_shader_name                       = "skybox.vert.spv";
 	pl_state.frag_shader_name                       = "skybox.frag.spv";
 	pl_state.rasterization_state.cull_mode          = vk::CullModeFlagBits::eFront;

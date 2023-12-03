@@ -34,16 +34,19 @@ VKAPI_ATTR void VKAPI_CALL vkDestroyDebugUtilsMessengerEXT(VkInstance instance, 
 namespace W3D
 {
 
+// The validation layer we are using for the debug build.
 const std::vector<const char *> Instance::VALIDATION_LAYERS = {
     "VK_LAYER_KHRONOS_validation",
 };
 
+// Create the instance and the surface.
 Instance::Instance(const std::string &app_name, Window &window)
 {
 	create_instance(app_name);
 	surface_ = window.create_surface(*this);
 }
 
+// Destroy all managed resource.
 Instance::~Instance()
 {
 	if (ENABLE_VALIDATION_LAYERS)
@@ -54,6 +57,7 @@ Instance::~Instance()
 	handle_.destroy();
 }
 
+// Create the instance.
 void Instance::create_instance(const std::string &app_name)
 {
 	if (ENABLE_VALIDATION_LAYERS && !is_validation_layer_supported())
@@ -72,6 +76,7 @@ void Instance::create_instance(const std::string &app_name)
 	std::vector<const char *> extensions = get_required_extensions();
 	std::vector<const char *> layers     = get_required_layers();
 
+	// If the required layers and the required extensions are not supported, an error will be thrown.
 	vk::InstanceCreateInfo instance_cinfo{
 	    .flags                   = IS_ON_OSX ? vk::InstanceCreateFlags{vk::InstanceCreateFlagBits::eEnumeratePortabilityKHR} : vk::InstanceCreateFlags{},
 	    .pApplicationInfo        = &app_info,
@@ -81,6 +86,7 @@ void Instance::create_instance(const std::string &app_name)
 	    .ppEnabledExtensionNames = extensions.data(),
 	};
 
+	// Create the debugger only during debug build.
 	vk::DebugUtilsMessengerCreateInfoEXT debug_cinfo;
 	if (ENABLE_VALIDATION_LAYERS)
 	{
@@ -96,6 +102,7 @@ void Instance::create_instance(const std::string &app_name)
 	}
 }
 
+// create a const string vector with all the required extensions.
 std::vector<const char *> Instance::get_required_extensions()
 {
 	std::vector<const char *> extensions;
@@ -116,6 +123,7 @@ std::vector<const char *> Instance::get_required_extensions()
 	return extensions;
 }
 
+// create a const string vector with all the required layers.
 std::vector<const char *> Instance::get_required_layers()
 {
 	std::vector<const char *> layers;
@@ -131,6 +139,7 @@ std::vector<const char *> Instance::get_required_layers()
 	return layers;
 }
 
+// Query the instance and see if all validation layers are supported.
 bool Instance::is_validation_layer_supported()
 {
 	auto layers = vk::enumerateInstanceLayerProperties();
@@ -157,6 +166,8 @@ bool Instance::is_validation_layer_supported()
 	return true;
 }
 
+// Load the function ptrs for debug messenger related.
+// * We need to do this because these functions are extension functions. They are not included in the vulkan dll.
 void Instance::load_functionn_ptrs()
 {
 	create_debug_utils_messenger = reinterpret_cast<PFN_vkCreateDebugUtilsMessengerEXT>(handle_.getProcAddr("vkCreateDebugUtilsMessengerEXT"));
@@ -176,6 +187,7 @@ void Instance::load_functionn_ptrs()
 	}
 }
 
+// Create the debug messenger.
 void Instance::init_debug_messenger()
 {
 	vk::DebugUtilsMessengerCreateInfoEXT debug_cinfo;
@@ -183,6 +195,7 @@ void Instance::init_debug_messenger()
 	debug_messenger_ = handle_.createDebugUtilsMessengerEXT(debug_cinfo);
 }
 
+// Helper function that fills out a messenger create info.
 void Instance::populate_debug_messenger_create_info(vk::DebugUtilsMessengerCreateInfoEXT &createInfo)
 {
 	using SeverityFlagBits = vk::DebugUtilsMessageSeverityFlagBitsEXT;
@@ -194,6 +207,7 @@ void Instance::populate_debug_messenger_create_info(vk::DebugUtilsMessengerCreat
 	createInfo.pfnUserCallback = Instance::debug_callback;
 }
 
+// When a message get sent to the messenger, this function will be called.
 inline VKAPI_ATTR VkBool32 VKAPI_CALL Instance::debug_callback(
     VkDebugUtilsMessageSeverityFlagBitsEXT      message_severity,
     VkDebugUtilsMessageTypeFlagsEXT             message_type,
@@ -210,6 +224,7 @@ inline VKAPI_ATTR VkBool32 VKAPI_CALL Instance::debug_callback(
 	return VK_FALSE;
 }
 
+// Pick a physical device that are suitable.
 std::unique_ptr<PhysicalDevice> Instance::pick_physical_device()
 {
 	auto physical_device_handles = handle_.enumeratePhysicalDevices();
@@ -231,6 +246,7 @@ std::unique_ptr<PhysicalDevice> Instance::pick_physical_device()
 	throw std::runtime_error("failed to find a suitable GPU!");
 }
 
+// A physicak device is suitable if it supports all required extensions, all required queue families, all required features, and swapchain.
 bool Instance::is_physical_device_suitable(const PhysicalDevice &physical_device)
 {
 	const auto &indices                 = physical_device.get_queue_family_indices();

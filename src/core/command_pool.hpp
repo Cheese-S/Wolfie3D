@@ -9,12 +9,14 @@ namespace W3D
 class Device;
 class CommandBuffer;
 
+// We either reset the pool (resetting all the buffers allocated from this pool together) or reset individual buffers.
 enum class CommandPoolResetStrategy
 {
 	eIndividual,
 	ePool
 };
 
+// RAII wrapper for vkCommandPool
 class CommandPool : public VulkanObject<vk::CommandPool>
 {
   public:

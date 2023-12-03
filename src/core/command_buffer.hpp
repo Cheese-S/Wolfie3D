@@ -9,6 +9,9 @@ class Image;
 class ImageResource;
 class CommandPool;
 
+// Wrapper for vkCommandBuffer.
+// Commandbuffer also provide helper functions for commmon commandbuffer actions.
+// * Commandbuffer does not create themselves. We allocate them from a commandbuffer pool.
 class CommandBuffer : public VulkanObject<vk::CommandBuffer>
 {
 	friend CommandPool;

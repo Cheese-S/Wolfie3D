@@ -16,6 +16,9 @@ class Buffer;
 namespace sg
 {
 
+// The vertex specification used in W3D
+// This is obviously an overkill and waste a lot of memory.
+// A real life application would compile a multitude of shaders to deal with different vertex input.
 struct Vertex
 {
 	glm::vec3 pos;
@@ -29,6 +32,8 @@ struct Vertex
 };
 
 class Material;
+
+// Submesh component. Directly following glTF spec.
 class SubMesh : public Component
 {
   public:

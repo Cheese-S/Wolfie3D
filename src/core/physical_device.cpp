@@ -6,16 +6,17 @@
 
 namespace W3D
 {
+
+// Create physical device with GIVEN handle.
+// The handles are created by vulkan, therefore we don't need to handle their destruction.
 PhysicalDevice::PhysicalDevice(vk::PhysicalDevice handle, Instance &instance) :
     VulkanObject(handle),
     instance_(instance)
 {
-	if (handle_)
-	{
-		find_queue_familiy_indices();
-	};
+	find_queue_familiy_indices();
 };
 
+// Move constructor.
 PhysicalDevice::PhysicalDevice(PhysicalDevice &&rhs) :
     VulkanObject(std::move(rhs)),
     instance_(rhs.instance_),
@@ -25,6 +26,7 @@ PhysicalDevice::PhysicalDevice(PhysicalDevice &&rhs) :
 {
 }
 
+// Check if physical device support all the given extensions.
 bool PhysicalDevice::is_all_extensions_supported(const std::vector<const char *> &required_extensions) const
 {
 	auto                  avaliable_extensions = handle_.enumerateDeviceExtensionProperties();
@@ -36,6 +38,8 @@ bool PhysicalDevice::is_all_extensions_supported(const std::vector<const char *>
 	return required_set.empty();
 }
 
+// Query the physical device and find the queue family indices.
+// We can create multiple queue within a family but we don't do that here/
 void PhysicalDevice::find_queue_familiy_indices()
 {
 	QueueFamilyIndices indices;

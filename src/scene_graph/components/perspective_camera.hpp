@@ -3,6 +3,9 @@
 #include "camera.hpp"
 namespace W3D::sg
 {
+
+// A perspective camera component.
+// Contains all the data needed to build a perspective camera.
 class PerspectiveCamera : public Camera
 {
   public:

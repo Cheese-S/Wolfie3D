@@ -21,6 +21,7 @@ struct QueueFamilyIndices
 	}
 };
 
+// Metadata struct that contains a physical device's support for swapchain.
 struct SwapchainSupportDetails
 {
 	vk::SurfaceCapabilitiesKHR        capabilities;
@@ -28,6 +29,8 @@ struct SwapchainSupportDetails
 	std::vector<vk::PresentModeKHR>   present_modes;
 };
 
+// Wrapper class for VkPhysicalDevice
+// VkPhysicalDevice refers to actual GPU hardware. We use it to query support for features etc.
 class PhysicalDevice : public VulkanObject<typename vk::PhysicalDevice>
 {
   public:

@@ -7,6 +7,9 @@ namespace W3D
 {
 class CVarProperty;
 
+// Console variables system.
+// This can be used to support gui global variables and let user configure the application during runtime.
+// Due to time reason, it's not implemented.
 class CVarSystem
 {
   public:

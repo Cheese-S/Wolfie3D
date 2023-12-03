@@ -11,6 +11,8 @@ namespace W3D::sg
 class Node;
 class Scene;
 
+// Component Wrapper for skin.
+
 class Skin : public Component
 {
   public:
@@ -24,7 +26,8 @@ class Skin : public Component
 
   private:
 	std::array<glm::mat4, MAX_NUM_JOINTS> IBMs_;
-	std::unordered_map<uint32_t, int>     node_joint_map_;
-	std::unordered_map<int, uint32_t>     joint_node_map_;
+	// Joint idx != node idx. We maintain a two way map to store this relation.
+	std::unordered_map<uint32_t, int> node_joint_map_;
+	std::unordered_map<int, uint32_t> joint_node_map_;
 };
 }        // namespace W3D::sg

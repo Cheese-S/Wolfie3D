@@ -18,6 +18,10 @@ struct SwapchainProperties
 	vk::Extent2D         extent;
 };
 
+// RAII Wrapper for vkSwapchainKHR.
+// The swapchain is an abstraction for an array of presentable images associated with a surface.
+// * A window is ONLY associated with one swapchain at a time.
+// * Whenever the window extent changes, we must rebuild swapchain with presentable images with updated extent.
 class Swapchain : public VulkanObject<vk::SwapchainKHR>
 {
   public:
@@ -47,32 +51,5 @@ class Swapchain : public VulkanObject<vk::SwapchainKHR>
 	std::vector<vk::Image>         frame_images_;        // Special images owned by vulkan
 	std::vector<ImageView>         frame_image_views_;
 	std::unique_ptr<ImageResource> p_depth_resource_;
-	// void createSwapchain();
-	// void chooseSurfaceFormat(const std::vector<vk::SurfaceFormatKHR> &formats);
-	// void choosePresentMode(const std::vector<vk::PresentModeKHR> &presentModes);
-	// void chooseExtent(const vk::SurfaceCapabilitiesKHR &capabilities);
-	// void createImageViews();
-	// void createColorResources();
-	// void createDepthResource();
-	// void cleanup();
-
-	// struct AttachmentResource
-	// {
-	// 	std::unique_ptr<DeviceMemory::Image> pImage = nullptr;
-	// 	vk::raii::ImageView                  view   = nullptr;
-	// };
-
-	// Window                                 *pWindow_;
-	// Instance                               *pInstance_;
-	// Device                                 *pDevice_;
-	// vk::SampleCountFlagBits                 mssaSamples_;
-	// vk::SurfaceFormatKHR                    surfaceFormat_;
-	// vk::PresentModeKHR                      presentMode_;
-	// vk::Extent2D                            extent_;
-	// std::unique_ptr<vk::raii::SwapchainKHR> swapchain_;
-	// std::vector<vk::Image>                  images_;
-	// std::vector<vk::raii::ImageView>        imageViews_;
-	// std::vector<vk::raii::Framebuffer>      framebuffers_;
-	// AttachmentResource                      depthResource_;
 };
 }        // namespace W3D

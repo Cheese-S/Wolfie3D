@@ -12,6 +12,8 @@ namespace W3D
 class Window;
 class PhysicalDevice;
 
+// RAII wrapper for vkInstance.
+// This class manages surface and the debug messenger.
 class Instance : public VulkanObject<vk::Instance>
 {
   public:

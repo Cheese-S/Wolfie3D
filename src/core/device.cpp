@@ -11,6 +11,7 @@
 
 namespace W3D
 {
+// On macOS, we need the portability extension.
 const std::vector<const char *> Device::REQUIRED_EXTENSIONS = {
     VK_KHR_SWAPCHAIN_EXTENSION_NAME,
 #ifdef __IS_ON_OSX__
@@ -18,6 +19,8 @@ const std::vector<const char *> Device::REQUIRED_EXTENSIONS = {
 #endif
 };
 
+// Create the logical device with the given instance and the given physical device.
+// Queues and device memory allocator are also created.
 Device::Device(Instance &instance, PhysicalDevice &physical_device) :
     instance_(instance),
     physical_device_(physical_device)
@@ -25,6 +28,8 @@ Device::Device(Instance &instance, PhysicalDevice &physical_device) :
 	QueueFamilyIndices indices        = physical_device.get_queue_family_indices();
 	std::set<uint32_t> unique_indices = {indices.compute_index.value(), indices.graphics_index.value(), indices.present_index.value()};
 
+	// The same queue family might be capable of doing multiple things.
+	// * But, we only need one queue per unique family.
 	std::vector<vk::DeviceQueueCreateInfo> queue_cinfos;
 	float                                  priority = 1.0f;
 	for (uint32_t index : unique_indices)
@@ -36,6 +41,8 @@ Device::Device(Instance &instance, PhysicalDevice &physical_device) :
 		queue_cinfos.push_back(queue_cinfo);
 	}
 
+	// Specifying the required physical device features.
+	// If they aren't supported, an error will be thrown.
 	vk::PhysicalDeviceFeatures required_features;
 	required_features.samplerAnisotropy = true;
 	required_features.sampleRateShading = true;
@@ -53,6 +60,8 @@ Device::Device(Instance &instance, PhysicalDevice &physical_device) :
 
 	handle_ = physical_device.get_handle().createDevice(device_cinfo);
 
+	// Get the queue handles from vulkan
+	// We don't need to explicitly destroy them.
 	graphics_queue_ = handle_.getQueue(indices.graphics_index.value(), 0);
 	present_queue_  = handle_.getQueue(indices.present_index.value(), 0);
 	compute_queue_  = handle_.getQueue(indices.compute_index.value(), 0);
@@ -68,6 +77,7 @@ Device::~Device()
 	handle_.destroy();
 }
 
+// Return a one time buf in begin state.
 CommandBuffer Device::begin_one_time_buf() const
 {
 	CommandBuffer cmd_buf = p_one_time_buf_pool_->allocate_command_buffer();
@@ -75,6 +85,7 @@ CommandBuffer Device::begin_one_time_buf() const
 	return cmd_buf;
 }
 
+// Submit a cmd buf, wait for it to finish, and free that cmd buf.
 void Device::end_one_time_buf(CommandBuffer &cmd_buf) const
 {
 	const auto &cmd_buf_handle = cmd_buf.get_handle();

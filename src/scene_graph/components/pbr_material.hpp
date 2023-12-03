@@ -20,6 +20,8 @@ enum class PBRMaterialFlagBits
 
 using PBRMaterialFlag = BitFlags<PBRMaterialFlagBits>;
 
+// PBRMaterial component.
+// It contains a descriptor set that binds all its textures.
 class PBRMaterial : public Material
 {
   public:
@@ -27,9 +29,9 @@ class PBRMaterial : public Material
 	virtual ~PBRMaterial() = default;
 	virtual std::type_index get_type() override;
 	glm::vec4               base_color_factor_{0.0f, 0.0f, 0.0f, 0.0f};
-	float                   metallic_factor{0.0f};
-	float                   roughness_factor{0.0f};
-	PBRMaterialFlag         flag;
-	vk::DescriptorSet       set;
+	float                   metallic_factor_{0.0f};
+	float                   roughness_factor_{0.0f};
+	PBRMaterialFlag         flag_;        // Used to tell shaders which textures are set.
+	vk::DescriptorSet       set_;
 };
 }        // namespace W3D::sg

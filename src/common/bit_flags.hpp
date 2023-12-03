@@ -5,6 +5,9 @@
 
 namespace W3D
 {
+
+// An abstracted bit flag class. Common bit operations are provided as constexpr.
+// T is expected to be an integer type.
 template <typename T>
 class BitFlags
 {

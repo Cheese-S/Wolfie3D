@@ -18,6 +18,8 @@ struct DeviceAllocationDetails
 	VkMemoryPropertyFlags flags;
 };
 
+// Wrapper for VMA allocated objects.
+// It contains the information neeeded by the VMA to manage its lifetime.
 template <typename THandle>
 class DeviceMemoryObject : public VulkanObject<THandle>
 {
@@ -44,7 +46,9 @@ class DeviceMemoryObject : public VulkanObject<THandle>
 			vmaGetAllocationMemoryProperties(details_.allocator, details_.allocation, &details_.flags);
 		}
 	}
-	inline bool is_mappable()
+
+	// This tells us whether we can map an object's memory on CPU so that we can write to it directly
+	bool is_mappable()
 	{
 		return details_.flags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
 	}

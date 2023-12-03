@@ -7,17 +7,21 @@
 namespace W3D::fu
 {
 
+// The default relative paths.
+// These are defined with respect to the binary (.exe)
 const std::unordered_map<FileType, std::string> relative_paths = {
     {FileType::eShader, "shaders/"},
     {FileType::eModelAsset, "../assets/models/"},
     {FileType::eImage, "../assets/images/"},
 };
 
+// Read a binary from the shader directory.
 std::vector<uint8_t> read_shader_binary(const std::string &file_name)
 {
 	return read_binary(compute_abs_path(FileType::eShader, file_name));
 };
 
+// Read a file as binary.
 std::vector<uint8_t> read_binary(const std::string &path)
 {
 	std::ifstream file(path, std::ios::ate | std::ios::binary);
@@ -38,6 +42,8 @@ std::vector<uint8_t> read_binary(const std::string &path)
 	return buffer;
 }
 
+// Helper function that returns a file's extension
+// Eg. aaaa.txt, the extension is txt
 std::string get_file_extension(const std::string &file_name)
 {
 	auto extension_pos = file_name.find_last_of(".");

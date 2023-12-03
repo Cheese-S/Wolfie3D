@@ -6,6 +6,9 @@
 
 namespace W3D
 {
+
+// Create a command pool associated with a certain family.
+// * All buffers allocated from this pool will be submited to that queue.
 CommandPool::CommandPool(Device &device, const vk::Queue &queue, uint32_t queue_family_index, CommandPoolResetStrategy strategy, vk::CommandPoolCreateFlags flags) :
     device_(device),
     queue_(queue),
@@ -33,11 +36,13 @@ CommandPool::~CommandPool()
 	}
 }
 
+// Helper function to allocate one single buffer.
 CommandBuffer CommandPool::allocate_command_buffer(vk::CommandBufferLevel level)
 {
 	return std::move(allocate_command_buffers(1, level)[0]);
 }
 
+// Allocate command buffers. Grab buffers from free list first. If there aren't enough buffers, allocate new ones.
 std::vector<CommandBuffer> CommandPool::allocate_command_buffers(uint32_t count, vk::CommandBufferLevel level)
 {
 	std::vector<CommandBuffer> &free_list = level == vk::CommandBufferLevel::ePrimary ? primary_cmd_bufs_ : secondary_cmd_bufs_;
@@ -70,6 +75,7 @@ std::vector<CommandBuffer> CommandPool::allocate_command_buffers(uint32_t count,
 	return cmd_bufs;
 }
 
+// Recycle buffers and push them to free list.
 void CommandPool::recycle_command_buffer(CommandBuffer &cmd_buf)
 {
 	if (cmd_buf.level_ == vk::CommandBufferLevel::ePrimary)
@@ -82,6 +88,7 @@ void CommandPool::recycle_command_buffer(CommandBuffer &cmd_buf)
 	}
 }
 
+// Helper function to free an array of buffers
 void CommandPool::free_command_buffers(std::vector<CommandBuffer> &cmd_bufs)
 {
 	std::vector<vk::CommandBuffer> cmd_buf_handles;
@@ -94,12 +101,14 @@ void CommandPool::free_command_buffers(std::vector<CommandBuffer> &cmd_bufs)
 	device_.get_handle().freeCommandBuffers(handle_, cmd_buf_handles);
 }
 
+// Helper function that frees one cmd buf.
 void CommandPool::free_command_buffer(CommandBuffer &cmd_buf)
 {
 	device_.get_handle().freeCommandBuffers(handle_, cmd_buf.get_handle());
 	cmd_buf.handle_ = nullptr;
 }
 
+// Reset the command pool.
 void CommandPool::reset()
 {
 	device_.get_handle().resetCommandPool(handle_);

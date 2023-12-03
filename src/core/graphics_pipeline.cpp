@@ -3,18 +3,19 @@
 #include "common/file_utils.hpp"
 #include "common/utils.hpp"
 #include "device.hpp"
-#include "pipeline_layout.hpp"
 #include "render_pass.hpp"
 
 namespace W3D
 {
 
+// Create a sensible default graphics pipeline.
 GraphicsPipeline::GraphicsPipeline(Device &device, RenderPass &render_pass, GraphicsPipelineState &state, vk::PipelineLayoutCreateInfo &pl_layout_cinfo) :
     device_(device)
 {
 	vk::ShaderModule vert_shader_module = create_shader_module(state.vert_shader_name);
 	vk::ShaderModule frag_shader_module = create_shader_module(state.frag_shader_name);
 
+	// Assume shader's entry point function is main.
 	vk::PipelineShaderStageCreateInfo vert_stage_cinfo{
 	    .stage  = vk::ShaderStageFlagBits::eVertex,
 	    .module = vert_shader_module,
@@ -80,6 +81,7 @@ GraphicsPipeline::GraphicsPipeline(Device &device, RenderPass &render_pass, Grap
 	    .blendConstants  = std::array<float, 4>{0.0f, 0.0f, 0.0f, 0.0f},
 	};
 
+	// We dynamically specify the viewport and scissor during rendering.
 	std::vector<vk::DynamicState>      dynamic_states{vk::DynamicState::eViewport, vk::DynamicState::eScissor};
 	vk::PipelineDynamicStateCreateInfo dynamic_state_cinfo{
 	    .dynamicStateCount = to_u32(dynamic_states.size()),
@@ -113,13 +115,11 @@ GraphicsPipeline::GraphicsPipeline(Device &device, RenderPass &render_pass, Grap
 GraphicsPipeline::~GraphicsPipeline()
 {
 	// In our design, we bind pipeline layout to a pipeline.
-	if (handle_)
-	{
-		device_.get_handle().destroyPipelineLayout(pl_layout_);
-		device_.get_handle().destroyPipeline(handle_);
-	}
+	device_.get_handle().destroyPipelineLayout(pl_layout_);
+	device_.get_handle().destroyPipeline(handle_);
 }
 
+// Load the shader binary and create vkShaderModule.
 vk::ShaderModule GraphicsPipeline::create_shader_module(const std::string &name)
 {
 	std::vector<uint8_t>       binary = fu::read_shader_binary(name);

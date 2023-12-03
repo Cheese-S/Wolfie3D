@@ -4,6 +4,7 @@
 
 namespace W3D::sg
 {
+// AABB scene component.
 class AABB : public Component
 {
   public:

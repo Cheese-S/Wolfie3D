@@ -2,6 +2,9 @@
 
 namespace W3D
 {
+
+// Simple Wrapper class for Vulkan type.
+// * Any class extending this should implement their own destructor.
 template <typename THandle>
 class VulkanObject
 {

@@ -5,6 +5,7 @@
 namespace W3D
 {
 
+// Helper function to create a 2D image view create info.
 vk::ImageViewCreateInfo ImageView::two_dim_view_cinfo(vk::Image image, vk::Format format, vk::ImageAspectFlags aspct_flags, uint32_t mip_levels)
 {
 	vk::ImageViewCreateInfo view_cinfo{
@@ -22,6 +23,7 @@ vk::ImageViewCreateInfo ImageView::two_dim_view_cinfo(vk::Image image, vk::Forma
 	return view_cinfo;
 }
 
+// Helper function to create a 3D image view create info.
 vk::ImageViewCreateInfo ImageView::cube_view_cinfo(vk::Image image, vk::Format format, vk::ImageAspectFlags aspct_flags, uint32_t mip_levels)
 {
 	vk::ImageViewCreateInfo view_cinfo{
@@ -39,11 +41,13 @@ vk::ImageViewCreateInfo ImageView::cube_view_cinfo(vk::Image image, vk::Format f
 	return view_cinfo;
 }
 
+// Create a null imageview.
 ImageView::ImageView(const Device &device, std::nullptr_t nptr) :
     device_(device)
 {
 }
 
+// Create an imageview with the given create info
 ImageView::ImageView(const Device &device, vk::ImageViewCreateInfo &image_view_cinfo) :
     device_(device),
     subresource_range_(image_view_cinfo.subresourceRange)
@@ -51,12 +55,14 @@ ImageView::ImageView(const Device &device, vk::ImageViewCreateInfo &image_view_c
 	handle_ = device_.get_handle().createImageView(image_view_cinfo);
 }
 
+// Move constructor
 ImageView::ImageView(ImageView &&rhs) :
     VulkanObject(std::move(rhs)),
     device_(rhs.device_),
     subresource_range_(rhs.subresource_range_)
 {}
 
+// Move assignment operator.
 ImageView &ImageView::operator=(ImageView &&rhs)
 {
 	if (handle_)
@@ -69,6 +75,7 @@ ImageView &ImageView::operator=(ImageView &&rhs)
 	return *this;
 }
 
+// Clean up if not null.
 ImageView::~ImageView()
 {
 	if (handle_)

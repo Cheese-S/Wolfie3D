@@ -8,6 +8,9 @@ namespace W3D
 class Device;
 class Swapchain;
 
+// Wrapper class for VkRenderPass
+// * Renderpass is a concept only exists in Vulkan. It DESCRIBES a set of image resources used during rendering and subpasses (stpes in a renderpass).
+// * It is merely a meta data object that gives hint to the GPU.
 class RenderPass : public VulkanObject<vk::RenderPass>
 {
   public:

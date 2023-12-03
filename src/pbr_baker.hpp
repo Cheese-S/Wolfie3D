@@ -19,18 +19,20 @@ class Device;
 class GraphicsPipeline;
 class RenderPass;
 class Framebuffer;
-class PipelineLayout;
 class CommandBuffer;
 
-struct Texture
+// PBRTexture manages its own lifetime.
+// * It is NOT owned by a scene.
+struct PBRTexture
 {
-	Texture(ImageResource &&resource, Sampler &&sampler) :
+	PBRTexture(ImageResource &&resource, Sampler &&sampler) :
 	    resource(std::move(resource)),
 	    sampler(std::move(sampler)){};
 	ImageResource resource;
 	Sampler       sampler;
 };
 
+// POD struct for all the PBR resource.
 struct PBR
 {
 	PBR();
@@ -39,13 +41,15 @@ struct PBR
 	PBR(PBR &&rhs)            = default;
 	PBR &operator=(PBR &&rhs) = default;
 
-	std::unique_ptr<Texture>     p_background;
-	std::unique_ptr<Texture>     p_irradiance;
-	std::unique_ptr<Texture>     p_prefilter;
-	std::unique_ptr<Texture>     p_brdf_lut;
+	std::unique_ptr<PBRTexture>  p_background;
+	std::unique_ptr<PBRTexture>  p_irradiance;
+	std::unique_ptr<PBRTexture>  p_prefilter;
+	std::unique_ptr<PBRTexture>  p_brdf_lut;
 	std::unique_ptr<sg::SubMesh> p_box;
 };
 
+// Responsible for baking IBL resources.
+// To get a better understanding about PBR and IBL, refer to https://learnopengl.com/PBR/Theory
 class PBRBaker
 {
   public:
@@ -70,16 +74,16 @@ class PBRBaker
 	void bake_brdf_lut();
 
 	void draw_box(CommandBuffer &cmd_buf);
-	void transfer_from_src_to_texture(CommandBuffer &cmd_buf, ImageResource &src, Texture &texture, vk::ImageCopy copy_region);
+	void transfer_from_src_to_texture(CommandBuffer &cmd_buf, ImageResource &src, PBRTexture &texture, vk::ImageCopy copy_region);
 
-	RenderPass               create_color_only_renderpass(vk::Format format, vk::ImageLayout initial_layout = vk::ImageLayout::eUndefined, vk::ImageLayout final_layout = vk::ImageLayout::eColorAttachmentOptimal);
-	ImageResource            create_transfer_src(vk::Extent3D extent, vk::Format format);
-	Framebuffer              create_square_framebuffer(const RenderPass &render_pass, const ImageView &view, uint32_t dimension);
-	GraphicsPipeline         create_graphics_pipeline(RenderPass &render_pass, vk::PipelineLayoutCreateInfo &ppl_layout_cinfo, const char *vert_shader_name, const char *frag_shader_name);
-	DescriptorAllocation     allocate_texture_descriptor(Texture &texture);
-	std::unique_ptr<Texture> create_empty_cube_texture(ImageMetaInfo &cube_meta);
-	ImageResource            create_empty_cubic_img_resource(ImageMetaInfo &img_tinfo);
-	void                     create_brdf_lut_texture();
+	RenderPass                  create_color_only_renderpass(vk::Format format, vk::ImageLayout initial_layout = vk::ImageLayout::eUndefined, vk::ImageLayout final_layout = vk::ImageLayout::eColorAttachmentOptimal);
+	ImageResource               create_transfer_src(vk::Extent3D extent, vk::Format format);
+	Framebuffer                 create_square_framebuffer(const RenderPass &render_pass, const ImageView &view, uint32_t dimension);
+	GraphicsPipeline            create_graphics_pipeline(RenderPass &render_pass, vk::PipelineLayoutCreateInfo &ppl_layout_cinfo, const char *vert_shader_name, const char *frag_shader_name);
+	DescriptorAllocation        allocate_texture_descriptor(PBRTexture &texture);
+	std::unique_ptr<PBRTexture> create_empty_cube_texture(ImageMetaInfo &cube_meta);
+	ImageResource               create_empty_cubic_img_resource(ImageMetaInfo &img_tinfo);
+	void                        create_brdf_lut_texture();
 
 	Device         &device_;
 	PBR             result_;

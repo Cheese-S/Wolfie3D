@@ -12,12 +12,14 @@ namespace W3D
 
 /* ---------------------------- DescriptorBuilder --------------------------- */
 
+// Constructor for builder. This is only called by the begin method.
 DescriptorBuilder::DescriptorBuilder(DescriptorLayoutCache &layout_cache, DescriptorAllocator &allocator) :
     layout_cache_(layout_cache),
     allocator_(allocator)
 {
 }
 
+// Helper function to begin a building process.
 DescriptorBuilder DescriptorBuilder::begin(DescriptorLayoutCache &layout_cache,
                                            DescriptorAllocator   &allocator)
 {
@@ -25,6 +27,8 @@ DescriptorBuilder DescriptorBuilder::begin(DescriptorLayoutCache &layout_cache,
 	return builder;
 }
 
+// bind the buffer to specified slot.
+// * Binding to the same slot will cause earlier binding to be overwritten.
 DescriptorBuilder &DescriptorBuilder::bind_buffer(uint32_t                  binding,
                                                   vk::DescriptorBufferInfo &buffer_info,
                                                   vk::DescriptorType        type,
@@ -48,6 +52,8 @@ DescriptorBuilder &DescriptorBuilder::bind_buffer(uint32_t                  bind
 	return *this;
 }
 
+// bind the image to the specified slot.
+// * Binding to the same slot will cause earlier binding to be overwritten.
 DescriptorBuilder &DescriptorBuilder::bind_image(uint32_t                 binding,
                                                  vk::DescriptorImageInfo &image_info,
                                                  vk::DescriptorType       type,
@@ -69,6 +75,8 @@ DescriptorBuilder &DescriptorBuilder::bind_image(uint32_t                 bindin
 	return *this;
 }
 
+// Actually allocating the set and write to that set.
+// Retrieve a set layout with the specified layout_cinfo from layout cache.
 DescriptorAllocation DescriptorBuilder::build()
 {
 	vk::DescriptorSetLayoutCreateInfo layout_cinfo{
@@ -90,6 +98,7 @@ DescriptorAllocation DescriptorBuilder::build()
 
 /* -------------------------- DESCRIPTOR ALLOCATOR -------------------------- */
 
+// Sensible defaults for different types of descriptors.
 const std::vector<DescriptorAllocator::PoolSizeFactor>
     DescriptorAllocator::DESCRIPTOR_SIZE_FACTORS = {
         {vk::DescriptorType::eSampler, 0.5f},
@@ -121,15 +130,16 @@ DescriptorAllocator::~DescriptorAllocator()
 	}
 }
 
+// Allocate descriptor set with the given layout from a free pool.
 vk::DescriptorSet DescriptorAllocator::allocate(vk::DescriptorSetLayout &layout)
 {
-	if (!current_pool)
+	if (!current_pool_)
 	{
-		current_pool = grab_pool();
-		used_pools_.push_back(current_pool);
+		current_pool_ = grab_pool();
+		used_pools_.push_back(current_pool_);
 	}
 	vk::DescriptorSetAllocateInfo descriptor_set_ainfo{
-	    .descriptorPool     = current_pool,
+	    .descriptorPool     = current_pool_,
 	    .descriptorSetCount = 1,
 	    .pSetLayouts        = &layout,
 	};
@@ -147,15 +157,18 @@ vk::DescriptorSet DescriptorAllocator::allocate(vk::DescriptorSetLayout &layout)
 	}
 	catch (...)
 	{
+		// Rarely, there is some error that is not pool realted. We cannot handle it. Return a null one.
 		return vk::DescriptorSet{nullptr};
 	}
 
-	current_pool = grab_pool();
-	used_pools_.push_back(current_pool);
-	descriptor_set_ainfo.descriptorPool = current_pool;
+	// The old current_pool_ has run out of some descriptors.
+	current_pool_ = grab_pool();
+	used_pools_.push_back(current_pool_);
+	descriptor_set_ainfo.descriptorPool = current_pool_;
 	return device_.get_handle().allocateDescriptorSets(descriptor_set_ainfo)[0];
 }
 
+// Return a free pool.
 vk::DescriptorPool DescriptorAllocator::grab_pool()
 {
 	if (free_pools_.size() > 0)
@@ -170,6 +183,7 @@ vk::DescriptorPool DescriptorAllocator::grab_pool()
 	}
 }
 
+// Create a pool with specified default size.
 vk::DescriptorPool DescriptorAllocator::create_pool()
 {
 	std::vector<vk::DescriptorPoolSize> pool_sizes;
@@ -185,6 +199,8 @@ vk::DescriptorPool DescriptorAllocator::create_pool()
 	return device_.get_handle().createDescriptorPool(pool_cinfo);
 }
 
+// Reset all the used pools.
+// ! This free all descriptors allocated from these pools.
 void DescriptorAllocator::reset_pools()
 {
 	for (auto p : used_pools_)
@@ -194,7 +210,7 @@ void DescriptorAllocator::reset_pools()
 
 	free_pools_ = used_pools_;
 	used_pools_.clear();
-	current_pool = VK_NULL_HANDLE;
+	current_pool_ = VK_NULL_HANDLE;
 }
 
 const Device &DescriptorAllocator::get_device()
@@ -204,11 +220,13 @@ const Device &DescriptorAllocator::get_device()
 
 /* -------------------------- DescriptorLayoutCache ------------------------- */
 
+// Constructor for layout cache.
 DescriptorLayoutCache::DescriptorLayoutCache(Device &device) :
     device_(device)
 {
 }
 
+// Destroy all set layouts.
 DescriptorLayoutCache::~DescriptorLayoutCache()
 {
 	auto it = cache_.begin();
@@ -219,6 +237,7 @@ DescriptorLayoutCache::~DescriptorLayoutCache()
 	}
 }
 
+// create the set layout with the given create info.
 vk::DescriptorSetLayout DescriptorLayoutCache::create_descriptor_layout(
     vk::DescriptorSetLayoutCreateInfo &layout_cinfo)
 {
@@ -241,10 +260,9 @@ vk::DescriptorSetLayout DescriptorLayoutCache::create_descriptor_layout(
 		}
 	}
 
-	vk::DescriptorSetLayoutCreateInfo aaa;
-	vk::DescriptorSetLayoutBinding    binding;
+	vk::DescriptorSetLayoutBinding binding;
 
-	// Vulkan does not require the bindings to be sorted.
+	// DescriptorBuilder does not require the bindings to be sorted.
 	// We want them to be sorted to implement the cache look up logic.
 	if (!is_sorted)
 	{
@@ -260,11 +278,13 @@ vk::DescriptorSetLayout DescriptorLayoutCache::create_descriptor_layout(
 	}
 	else
 	{
+		// create new set layout if there isn't one.
 		cache_.insert(std::make_pair(layout_details, device_.get_handle().createDescriptorSetLayout(layout_cinfo)));
 		return cache_.at(layout_details);
 	}
 }
 
+// Campre LayoutDetails by comparing their bindings one by one.
 bool DescriptorLayoutCache::DescriptorSetLayoutDetails::operator==(
     const DescriptorSetLayoutDetails &other) const
 {
@@ -288,6 +308,7 @@ bool DescriptorLayoutCache::DescriptorSetLayoutDetails::operator==(
 	return true;
 }
 
+// Hash function for LayoutDetails. We uses vulkan.hpp's hash function for vk::DescriptorSetLayoutBinding
 size_t DescriptorLayoutCache::DescriptorSetLayoutDetails::hash() const
 {
 	using std::hash;

@@ -8,6 +8,10 @@
 namespace W3D::sg
 {
 class Node;
+
+// Representing transform matrix.
+// We store the local matrix using SRT.
+// World_M is cached. Only recalculate it if this node's parent needs to be recalculated or the local matix is changed.
 class Transform : public Component
 {
   public:
@@ -35,7 +39,7 @@ class Transform : public Component
 	glm::quat rotation_    = glm::quat(1.0, 0.0, 0.0, 0.0);
 	glm::vec3 scale_       = glm::vec3(1.0, 1.0, 1.0);
 
-	glm::mat4 world_M_ = glm::mat4(1.0);
+	glm::mat4 world_M_ = glm::mat4(1.0);        // This matrix represents the aggregated transform. (Multiplied with ancesotrs' transforms)
 
 	bool need_update_ = false;
 };

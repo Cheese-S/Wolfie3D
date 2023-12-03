@@ -2,6 +2,7 @@
 
 namespace W3D
 {
+// This file contains all event related enums and types.
 enum class EventType
 {
 	eKeyInput,

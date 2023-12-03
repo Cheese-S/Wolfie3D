@@ -35,28 +35,32 @@
 namespace W3D
 {
 
-inline vk::Filter             to_vk_min_filter(int min_filter);
-inline vk::Filter             to_vk_mag_filter(int mag_filter);
-inline vk::SamplerMipmapMode  to_vk_mipmap_mode(int mipmap_mode);
-inline vk::SamplerAddressMode to_vk_wrap_mode(int wrap_mode);
-sg::PBRMaterialFlagBits       to_sg_material_flag_bit(const std::string &texture_name);
-inline void                   to_sg_channel_output(sg::AnimationChannel &channel);
-inline sg::AnimationType      to_sg_animation_type(const std::string &interpolation);
-inline sg::AnimationTarget    to_sg_animation_target(const std::string &target);
-inline void                   to_W3D_vector_in_place(glm::vec3 &vec);
-inline void                   to_W3D_quaternion_in_place(glm::quat &quat);
-inline void                   to_W3D_matrix_in_place(glm::mat4 &M);
-void                          to_W3D_output_data_in_place(sg::AnimationSampler &sampler, sg::AnimationTarget target);
-inline vk::Format             get_attr_format(const tinygltf::Model &model, uint32_t accessor_id);
-inline std::vector<uint8_t>   get_attr_data(const tinygltf::Model &model, uint32_t accessor_id);
-inline std::vector<uint8_t>   convert_data_stride(const std::vector<uint8_t> &src, uint32_t src_stride, uint32_t dst_stride);
+// Forward declarations for type conversions helper functions.
+// They convert tinygltf constants to our types.
+vk::Filter              to_vk_min_filter(int min_filter);
+vk::Filter              to_vk_mag_filter(int mag_filter);
+vk::SamplerMipmapMode   to_vk_mipmap_mode(int mipmap_mode);
+vk::SamplerAddressMode  to_vk_wrap_mode(int wrap_mode);
+sg::PBRMaterialFlagBits to_sg_material_flag_bit(const std::string &texture_name);
+void                    to_sg_channel_output(sg::AnimationChannel &channel);
+sg::AnimationType       to_sg_animation_type(const std::string &interpolation);
+sg::AnimationTarget     to_sg_animation_target(const std::string &target);
+void                    to_W3D_vector_in_place(glm::vec3 &vec);
+void                    to_W3D_quaternion_in_place(glm::quat &quat);
+void                    to_W3D_matrix_in_place(glm::mat4 &M);
+void                    to_W3D_output_data_in_place(sg::AnimationSampler &sampler, sg::AnimationTarget target);
+vk::Format              get_attr_format(const tinygltf::Model &model, uint32_t accessor_id);
+std::vector<uint8_t>    get_attr_data(const tinygltf::Model &model, uint32_t accessor_id);
+std::vector<uint8_t>    convert_data_stride(const std::vector<uint8_t> &src, uint32_t src_stride, uint32_t dst_stride);
 
+// Default vertex attributes.
 const glm::vec3 DEFAULT_NORMAL = glm::vec3(0.0f);
 const glm::vec2 DEFAULT_UV     = glm::vec2(0.0f);
 const glm::vec4 DEFAULT_JOINT  = glm::vec4(0.0f);
 const glm::vec4 DEFAULT_WEIGHT = glm::vec4(0.0f);
 const glm::vec4 DEFAULT_COLOR  = glm::vec4(0.0f, 0.0f, 0.0f, 0.0f);
 
+// This conversion scale is needed because gltf is right-handed but W3D is left handed.
 const glm::vec3 GLTFLoader::W3D_CONVERSION_SCALE = glm::vec3(-1, 1, 1);
 
 template <class T, class Y>
@@ -68,17 +72,20 @@ struct TypeCast
 	}
 };
 
+// Init the gltfloader
 GLTFLoader::GLTFLoader(Device const &device) :
     device_(device)
 {
 }
 
+// Read the first mesh as a scene.
 std::unique_ptr<sg::SubMesh> GLTFLoader::read_model_from_file(const std::string &file_name, int mesh_idx)
 {
 	load_gltf_model(file_name);
 	return parse_submesh(nullptr, gltf_model_.meshes[mesh_idx].primitives[0]);
 }
 
+// Read the entire scene.
 std::unique_ptr<sg::Scene> GLTFLoader::read_scene_from_file(const std::string &file_name,
                                                             int                scene_index)
 {
@@ -86,6 +93,8 @@ std::unique_ptr<sg::Scene> GLTFLoader::read_scene_from_file(const std::string &f
 	return std::make_unique<sg::Scene>(parse_scene(scene_index));
 }
 
+// Read the gltf file using tinygltf.
+// * Still need parse the tinygltf representation.
 void GLTFLoader::load_gltf_model(const std::string &file_name)
 {
 	std::string err;
@@ -136,11 +145,14 @@ void GLTFLoader::load_gltf_model(const std::string &file_name)
 	}
 }
 
+// Parse the scene.
 sg::Scene GLTFLoader::parse_scene(int scene_idx)
 {
 	sg::Scene scene = sg::Scene("gltf_scene");
 	p_scene_        = &scene;
 
+	// We load components in a bottom-up version such that when a component A is loaded, all components A points to are already loaded.
+	// All components are loaded linearly.
 	load_samplers();
 	load_images();
 	load_textures();
@@ -156,6 +168,7 @@ sg::Scene GLTFLoader::parse_scene(int scene_idx)
 	return scene;
 }
 
+// We calculate the scene's AABB by taking the union of all node's AABB.
 void GLTFLoader::init_scene_bound()
 {
 	std::vector<sg::Node *> p_nodes  = p_scene_->get_nodes();
@@ -171,6 +184,7 @@ void GLTFLoader::init_scene_bound()
 	};
 }
 
+// Load sg::Sampler.
 void GLTFLoader::load_samplers() const
 {
 	std::vector<std::unique_ptr<sg::Sampler>> samplers(
@@ -183,6 +197,7 @@ void GLTFLoader::load_samplers() const
 	p_scene_->set_components(std::move(samplers));
 }
 
+// Parse a sampler.
 std::unique_ptr<sg::Sampler> GLTFLoader::parse_sampler(
     const tinygltf::Sampler &gltf_sampler) const
 {
@@ -212,6 +227,7 @@ std::unique_ptr<sg::Sampler> GLTFLoader::parse_sampler(
 	return std::make_unique<sg::Sampler>(device_, name, sampler_cinfo);
 }
 
+// Create a default sampler.
 std::unique_ptr<sg::Sampler> GLTFLoader::create_default_sampler() const
 {
 	tinygltf::Sampler gltf_sampler;
@@ -224,6 +240,8 @@ std::unique_ptr<sg::Sampler> GLTFLoader::create_default_sampler() const
 	return parse_sampler(gltf_sampler);
 }
 
+// Load all images.
+// * Actual image bytes are not uploaded to GPU yet. We defer that untill all images (including the default texture images) are parsed.
 void GLTFLoader::load_images()
 {
 	std::vector<std::unique_ptr<sg::Image>> p_images;
@@ -238,6 +256,8 @@ void GLTFLoader::load_images()
 	p_scene_->set_components(std::move(p_images));
 }
 
+// Parse an image and prepare the transfer infos.
+// * The resultant image are EMPTY.
 std::unique_ptr<sg::Image> GLTFLoader::parse_image(const tinygltf::Image &gltf_image)
 {
 	if (!gltf_image.image.empty())
@@ -266,6 +286,7 @@ std::unique_ptr<sg::Image> GLTFLoader::parse_image(const tinygltf::Image &gltf_i
 	    gltf_image.name);
 }
 
+// Actually upload the images to GPU.
 void GLTFLoader::batch_upload_images() const
 {
 	std::vector<sg::Image *> p_images = p_scene_->get_components<sg::Image>();
@@ -280,6 +301,7 @@ void GLTFLoader::batch_upload_images() const
 		CommandBuffer       cmd_buf    = device_.begin_one_time_buf();
 		size_t              batch_size = 0;
 
+		// Upload 64 MB data at once.
 		while (i < count && batch_size < 64 * 1024 * 1024)
 		{
 			sg::Image               *p_image   = p_images[i];
@@ -305,6 +327,7 @@ void GLTFLoader::batch_upload_images() const
 	}
 };
 
+// Helper function to create image resource.
 void GLTFLoader::create_image_resource(sg::Image &image, size_t idx) const
 {
 	const ImageTransferInfo &img_tinfo = img_tinfos_[idx];
@@ -327,8 +350,10 @@ void GLTFLoader::create_image_resource(sg::Image &image, size_t idx) const
 	image.set_resource(ImageResource(std::move(vk_image), ImageView(device_, view_cinfo)));
 }
 
+// Load the textures.
 void GLTFLoader::load_textures()
 {
+	// Create a default sampler in case a texture points to no sampler.
 	std::unique_ptr<sg::Sampler> p_default_sampler = create_default_sampler();
 	std::vector<sg::Sampler *>   p_samplers        = p_scene_->get_components<sg::Sampler>();
 	std::vector<sg::Image *>     p_images          = p_scene_->get_components<sg::Image>();
@@ -358,6 +383,7 @@ void GLTFLoader::load_textures()
 	p_scene_->add_component(std::move(p_default_sampler));
 }
 
+// Create a default texture.
 std::unique_ptr<sg::Texture> GLTFLoader::create_default_texture(sg::Sampler &default_sampler) const
 {
 	std::unique_ptr<sg::Texture> p_texture = std::make_unique<sg::Texture>("default_texture");
@@ -368,6 +394,7 @@ std::unique_ptr<sg::Texture> GLTFLoader::create_default_texture(sg::Sampler &def
 	return p_texture;
 }
 
+// Create a default texture image. (a 1x1 black image)
 std::unique_ptr<sg::Image> GLTFLoader::create_default_texture_image() const
 {
 	vk::ImageCreateInfo image_cinfo{
@@ -406,12 +433,15 @@ std::unique_ptr<sg::Image> GLTFLoader::create_default_texture_image() const
 
 	return std::make_unique<sg::Image>(std::move(resource), "default_image");
 }
+
+// Parse and create the texture.
 std::unique_ptr<sg::Texture> GLTFLoader::parse_texture(
     const tinygltf::Texture &gltf_texture) const
 {
 	return std::make_unique<sg::Texture>(gltf_texture.name);
 }
 
+// Load the materials.
 void GLTFLoader::load_materials()
 {
 	std::vector<sg::Texture *> p_textures;
@@ -430,6 +460,7 @@ void GLTFLoader::load_materials()
 	std::unique_ptr<sg::PBRMaterial> p_default_material = create_default_material();
 }
 
+// Parse the material's data fields.
 std::unique_ptr<sg::PBRMaterial> GLTFLoader::parse_material(
     const tinygltf::Material &gltf_material) const
 {
@@ -445,11 +476,11 @@ std::unique_ptr<sg::PBRMaterial> GLTFLoader::parse_material(
 		}
 		else if (gltf_value.first == "metallicFactor")
 		{
-			material->metallic_factor = static_cast<float>(gltf_value.second.Factor());
+			material->metallic_factor_ = static_cast<float>(gltf_value.second.Factor());
 		}
 		else if (gltf_value.first == "roughnessFactor")
 		{
-			material->roughness_factor = static_cast<float>(gltf_value.second.Factor());
+			material->roughness_factor_ = static_cast<float>(gltf_value.second.Factor());
 		}
 	}
 
@@ -489,6 +520,7 @@ std::unique_ptr<sg::PBRMaterial> GLTFLoader::parse_material(
 	return material;
 }
 
+// Search for already loaded textures and append pointers.
 void GLTFLoader::append_textures_to_material(tinygltf::ParameterMap &parameter_map, std::vector<sg::Texture *> &p_textures, sg::PBRMaterial *p_material)
 {
 	for (auto &value : parameter_map)
@@ -505,17 +537,19 @@ void GLTFLoader::append_textures_to_material(tinygltf::ParameterMap &parameter_m
 				img_tinfos_[gltf_model_.textures[texture_idx].source].meta.format = vk::Format::eR8G8B8A8Srgb;
 			}
 			p_material->texture_map_[texture_name] = p_textures[value.second.TextureIndex()];
-			p_material->flag |= flag_bit;
+			p_material->flag_ |= flag_bit;
 		}
 	}
 }
 
+// Create a default material.
 std::unique_ptr<sg::PBRMaterial> GLTFLoader::create_default_material() const
 {
 	tinygltf::Material gltf_material;
 	return parse_material(gltf_material);
 }
 
+// Load all meshes.
 void GLTFLoader::load_meshs()
 {
 	std::unique_ptr<sg::PBRMaterial> p_default_material = create_default_material();
@@ -547,11 +581,14 @@ void GLTFLoader::load_meshs()
 	p_scene_->add_component(std::move(p_default_material));
 }
 
+// Parse the mesh.
 std::unique_ptr<sg::Mesh> GLTFLoader::parse_mesh(const tinygltf::Mesh &gltf_mesh) const
 {
 	return std::make_unique<sg::Mesh>(gltf_mesh.name);
 }
 
+// Parse the submesh.
+// First, we load the vertex attributes and then the indices.
 std::unique_ptr<sg::SubMesh> GLTFLoader::parse_submesh(sg::Mesh *p_mesh, const tinygltf::Primitive &gltf_submesh) const
 {
 	std::vector<Buffer>          transient_bufs;
@@ -596,6 +633,7 @@ std::unique_ptr<sg::SubMesh> GLTFLoader::parse_submesh(sg::Mesh *p_mesh, const t
 	p_submesh->p_vertex_buf_ = std::make_unique<Buffer>(std::move(vertex_buf));
 	transient_bufs.push_back(std::move(vertex_staging_buf));
 
+	// Load the indices if there is an index buffer.
 	if (gltf_submesh.indices >= 0)
 	{
 		const tinygltf::Accessor &accessor = gltf_model_.accessors[gltf_submesh.indices];
@@ -635,6 +673,7 @@ std::unique_ptr<sg::SubMesh> GLTFLoader::parse_submesh(sg::Mesh *p_mesh, const t
 	return std::move(p_submesh);
 }
 
+// Helper function for getting the vertex count
 size_t GLTFLoader::get_submesh_vertex_count(const tinygltf::Primitive &submesh) const
 {
 	// GLTF gurantees that a vertex will always have position attribute
@@ -642,6 +681,7 @@ size_t GLTFLoader::get_submesh_vertex_count(const tinygltf::Primitive &submesh) 
 	return accessor.count;
 }
 
+// Helper function to update a mesh's bound given the submesh
 void GLTFLoader::update_parent_mesh_bound(sg::Mesh *p_mesh, const tinygltf::Primitive &submesh) const
 {
 	const tinygltf::Accessor accessor = gltf_model_.accessors[submesh.attributes.find("POSITION")->second];
@@ -650,6 +690,7 @@ void GLTFLoader::update_parent_mesh_bound(sg::Mesh *p_mesh, const tinygltf::Prim
 	    glm::vec3(accessor.maxValues[0], accessor.maxValues[1], accessor.maxValues[2]));
 }
 
+// Load the cameras.
 void GLTFLoader::load_cameras()
 {
 	for (const tinygltf::Camera &camera : gltf_model_.cameras)
@@ -658,6 +699,7 @@ void GLTFLoader::load_cameras()
 	}
 }
 
+// Parse the cameras.
 std::unique_ptr<sg::Camera> GLTFLoader::parse_camera(
     const tinygltf::Camera &gltf_camera) const
 {
@@ -683,6 +725,8 @@ std::unique_ptr<sg::Camera> GLTFLoader::parse_camera(
 	return camera;
 }
 
+// Load a default camera.
+// * We create a default camera node for it.
 void GLTFLoader::load_default_camera()
 {
 	std::unique_ptr<sg::Node>   p_camera_node = std::make_unique<sg::Node>(-1, "default_camera");
@@ -696,6 +740,7 @@ void GLTFLoader::load_default_camera()
 	p_scene_->add_node(std::move(p_camera_node));
 }
 
+// Create a default camera.
 std::unique_ptr<sg::Camera> GLTFLoader::create_default_camera() const
 {
 	tinygltf::Camera gltf_camera;
@@ -710,6 +755,7 @@ std::unique_ptr<sg::Camera> GLTFLoader::create_default_camera() const
 	return parse_camera(gltf_camera);
 }
 
+// Load all nodes.
 void GLTFLoader::load_nodes(int scene_idx)
 {
 	std::vector<std::unique_ptr<sg::Node>> p_nodes      = parse_nodes();
@@ -723,6 +769,7 @@ void GLTFLoader::load_nodes(int scene_idx)
 	p_scene_->set_nodes(std::move(p_nodes));
 }
 
+// Parse all nodes.
 std::vector<std::unique_ptr<sg::Node>> GLTFLoader::parse_nodes()
 {
 	std::vector<sg::Camera *>              p_cameras = p_scene_->get_components<sg::Camera>();
@@ -764,6 +811,7 @@ std::vector<std::unique_ptr<sg::Node>> GLTFLoader::parse_nodes()
 	return p_nodes;
 }
 
+// Parse a node.
 std::unique_ptr<sg::Node> GLTFLoader::parse_node(const tinygltf::Node &gltf_node,
                                                  size_t                index) const
 {
@@ -771,6 +819,7 @@ std::unique_ptr<sg::Node> GLTFLoader::parse_node(const tinygltf::Node &gltf_node
 
 	auto &transform = node->get_transform();
 
+	// We need to convert the right-handed transfrom to W3D's left-handed transform.
 	if (!gltf_node.translation.empty())
 	{
 		glm::vec3 translation;
@@ -808,6 +857,8 @@ std::unique_ptr<sg::Node> GLTFLoader::parse_node(const tinygltf::Node &gltf_node
 	return node;
 }
 
+// Reconstruct the node hierachy.
+// We need this to calculate wolrd transforms for nodes & animation stuff.
 void GLTFLoader::init_node_hierarchy(tinygltf::Scene *p_gltf_scene, std::vector<std::unique_ptr<sg::Node>> &p_nodes, sg::Node &root)
 {
 	struct NodeTraversal
@@ -845,6 +896,7 @@ void GLTFLoader::init_node_hierarchy(tinygltf::Scene *p_gltf_scene, std::vector<
 	}
 }
 
+// Load the animations.
 void GLTFLoader::load_animations()
 {
 	std::vector<sg::Node *>                     p_nodes = p_scene_->get_nodes();
@@ -861,6 +913,7 @@ void GLTFLoader::load_animations()
 	p_scene_->set_components(std::move(p_animations));
 }
 
+// Load all the animation channels.
 std::vector<sg::AnimationChannel> GLTFLoader::parse_animation_channels(const tinygltf::Animation &gltf_animation, std::vector<sg::Node *> p_nodes)
 {
 	std::vector<sg::AnimationSampler> samplers = parse_animation_samplers(gltf_animation);
@@ -882,6 +935,7 @@ std::vector<sg::AnimationChannel> GLTFLoader::parse_animation_channels(const tin
 	return channels;
 }
 
+// Load all the animation samplers
 std::vector<sg::AnimationSampler> GLTFLoader::parse_animation_samplers(const tinygltf::Animation &gltf_animation)
 {
 	std::vector<sg::AnimationSampler> samplers;
@@ -899,6 +953,7 @@ std::vector<sg::AnimationSampler> GLTFLoader::parse_animation_samplers(const tin
 	return samplers;
 }
 
+// parse the animation input data.
 void GLTFLoader::parse_animation_input_data(const tinygltf::AnimationSampler &gltf_sampler, sg::AnimationSampler &sampler) const
 {
 	const tinygltf::Accessor &input_accessor = gltf_model_.accessors[gltf_sampler.input];
@@ -910,6 +965,7 @@ void GLTFLoader::parse_animation_input_data(const tinygltf::AnimationSampler &gl
 	}
 }
 
+// parse the animation output data.
 void GLTFLoader::parse_animation_output_data(const tinygltf::AnimationSampler &gltf_sampler, sg::AnimationSampler &sampler) const
 {
 	const tinygltf::Accessor &output_accessor = gltf_model_.accessors[gltf_sampler.output];
@@ -954,6 +1010,7 @@ void GLTFLoader::parse_animation_output_data(const tinygltf::AnimationSampler &g
 	}
 }
 
+// Load the skins.
 void GLTFLoader::load_skins()
 {
 	std::vector<std::unique_ptr<sg::Skin>> p_skins;
@@ -965,9 +1022,11 @@ void GLTFLoader::load_skins()
 	p_scene_->set_components(std::move(p_skins));
 }
 
+// Parse the skin.
 std::unique_ptr<sg::Skin> GLTFLoader::parse_skin(const tinygltf::Skin &gltf_skin)
 {
 	const std::vector<int> &joints = gltf_skin.joints;
+	// We forces a 256 joints limit.
 	if (joints.size() > sg::Skin::MAX_NUM_JOINTS)
 	{
 		LOGE("Skin {} exceeds the joint limits.", gltf_skin.name);
@@ -978,6 +1037,7 @@ std::unique_ptr<sg::Skin> GLTFLoader::parse_skin(const tinygltf::Skin &gltf_skin
 	auto                 &IBMs = p_skin->get_IBMs();
 	DataAccessInfo<float> IBM  = get_accessor_data_ptr<float>(gltf_skin.inverseBindMatrices);
 
+	// The inverse bind matrices are also defined in right-handed system. We need to convert them.
 	for (int joint_id = 0; joint_id < joints.size(); joint_id++)
 	{
 		p_skin->add_new_joint(joint_id, joints[joint_id]);
@@ -989,6 +1049,7 @@ std::unique_ptr<sg::Skin> GLTFLoader::parse_skin(const tinygltf::Skin &gltf_skin
 	return p_skin;
 }
 
+// Pick a scene to load.
 tinygltf::Scene *GLTFLoader::pick_scene(int scene_idx)
 {
 	tinygltf::Scene *gltf_scene  = nullptr;
@@ -1016,7 +1077,7 @@ tinygltf::Scene *GLTFLoader::pick_scene(int scene_idx)
 	return gltf_scene;
 }
 
-inline vk::Filter to_vk_min_filter(int min_filter)
+vk::Filter to_vk_min_filter(int min_filter)
 {
 	switch (min_filter)
 	{
@@ -1033,7 +1094,7 @@ inline vk::Filter to_vk_min_filter(int min_filter)
 	}
 }
 
-inline vk::Filter to_vk_mag_filter(int mag_filter)
+vk::Filter to_vk_mag_filter(int mag_filter)
 {
 	switch (mag_filter)
 	{
@@ -1046,7 +1107,7 @@ inline vk::Filter to_vk_mag_filter(int mag_filter)
 	}
 }
 
-inline vk::SamplerMipmapMode to_vk_mipmap_mode(int mipmap_mode)
+vk::SamplerMipmapMode to_vk_mipmap_mode(int mipmap_mode)
 {
 	switch (mipmap_mode)
 	{
@@ -1061,7 +1122,7 @@ inline vk::SamplerMipmapMode to_vk_mipmap_mode(int mipmap_mode)
 	}
 }
 
-inline vk::SamplerAddressMode to_vk_wrap_mode(int wrap_mode)
+vk::SamplerAddressMode to_vk_wrap_mode(int wrap_mode)
 {
 	switch (wrap_mode)
 	{
@@ -1089,7 +1150,7 @@ sg::PBRMaterialFlagBits to_sg_material_flag_bit(const std::string &texture_name)
 	return name_to_flag_bit_map[texture_name];
 }
 
-inline sg::AnimationType to_sg_animation_type(const std::string &interpolation)
+sg::AnimationType to_sg_animation_type(const std::string &interpolation)
 {
 	if (interpolation == "LINEAR")
 	{
@@ -1107,7 +1168,7 @@ inline sg::AnimationType to_sg_animation_type(const std::string &interpolation)
 	return sg::AnimationType::eLinear;
 }
 
-inline sg::AnimationTarget to_sg_animation_target(const std::string &target)
+sg::AnimationTarget to_sg_animation_target(const std::string &target)
 {
 	if (target == "translation")
 	{
@@ -1125,12 +1186,12 @@ inline sg::AnimationTarget to_sg_animation_target(const std::string &target)
 	return sg::AnimationTarget::eTranslation;
 }
 
-inline void to_W3D_vector_in_place(glm::vec3 &vec)
+void to_W3D_vector_in_place(glm::vec3 &vec)
 {
 	vec *= GLTFLoader::W3D_CONVERSION_SCALE;
 }
 
-inline void to_W3D_quaternion_in_place(glm::quat &quat)
+void to_W3D_quaternion_in_place(glm::quat &quat)
 {
 	// We need to flip the handiness
 	float     flip_scale        = -1;
@@ -1140,7 +1201,7 @@ inline void to_W3D_quaternion_in_place(glm::quat &quat)
 	quat.z                      = new_axis_rotation.z;
 }
 
-inline void to_W3D_matrix_in_place(glm::mat4 &M)
+void to_W3D_matrix_in_place(glm::mat4 &M)
 {
 	glm::mat4 convert = glm::scale(glm::mat4(1.0f), GLTFLoader::W3D_CONVERSION_SCALE);
 	M                 = convert * M * convert;
@@ -1173,7 +1234,7 @@ void to_W3D_output_data_in_place(sg::AnimationSampler &sampler, sg::AnimationTar
 	}
 }
 
-inline vk::Format get_attr_format(const tinygltf::Model &model, uint32_t accessor_id)
+vk::Format get_attr_format(const tinygltf::Model &model, uint32_t accessor_id)
 {
 	assert(accessor_id < model.accessors.size());
 	auto &accessor = model.accessors[accessor_id];

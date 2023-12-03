@@ -6,7 +6,8 @@
 
 namespace W3D
 {
-
+// An attachment is a description about an image used during a renderpass. The actual image is managed by the framebuffer.
+// Helper function to create color attachment description
 vk::AttachmentDescription RenderPass::color_attachment(vk::Format format, vk::ImageLayout initial_layout, vk::ImageLayout final_layout)
 {
 	vk::AttachmentDescription color_attachment{
@@ -22,6 +23,7 @@ vk::AttachmentDescription RenderPass::color_attachment(vk::Format format, vk::Im
 	return color_attachment;
 }
 
+// Helper function to create depth attachment description
 vk::AttachmentDescription RenderPass::depth_attachment(vk::Format format, vk::ImageLayout initial_layout, vk::ImageLayout final_layout)
 {
 	vk::AttachmentDescription depth_attachment{

@@ -11,7 +11,6 @@
 #include "core/framebuffer.hpp"
 #include "core/graphics_pipeline.hpp"
 #include "core/image_view.hpp"
-#include "core/pipeline_layout.hpp"
 #include "core/render_pass.hpp"
 
 #include "scene_graph/components/submesh.hpp"
@@ -32,6 +31,7 @@ PBR::PBR(){};
 
 PBR::~PBR(){};
 
+// Default resolutions for all PBR textures.
 const uint32_t PBRBaker::IRRADIANCE_DIMENSION = 64;
 const uint32_t PBRBaker::PREFILTER_DIMENSION  = 512;
 const uint32_t PBRBaker::BRDF_LUT_DIMENSION   = 512;
@@ -55,6 +55,7 @@ const std::vector<glm::mat4> PBRBaker::CUBE_FACE_MATRIXS = {
     glm::rotate(glm::mat4(1.0f), glm::radians(180.0f), glm::vec3(0.0f, 0.0f, 1.0f)),
 };
 
+// Create the PBRBaker and init renderdoc (only used for debugging).
 PBRBaker::PBRBaker(Device &device) :
     device_(device),
     desc_state_(device)
@@ -70,6 +71,7 @@ PBRBaker::PBRBaker(Device &device) :
 	load_background();
 }
 
+// Bake all the IBL resources.
 PBR PBRBaker::bake()
 {
 	prepare_irradiance();
@@ -78,12 +80,15 @@ PBR PBRBaker::bake()
 	return std::move(result_);
 }
 
+// Load a texture cube model. We will render irradiance and prefilter using it.
 void PBRBaker::load_cube_model()
 {
 	GLTFLoader loader(device_);
 	result_.p_box = loader.read_model_from_file("2.0/BoxTextured/gltf/BoxTextured.gltf", 0);
 }
 
+// Load a HDR cubemap.
+// * We hardcoded the HDR cubemap. But it can be replaced with other .dds HDR cubemap.
 void PBRBaker::load_background()
 {
 	std::string       path      = fu::compute_abs_path(fu::FileType::eImage, "papermill.dds");
@@ -104,9 +109,10 @@ void PBRBaker::load_background()
 
 	vk::SamplerCreateInfo sampler_cinfo = Sampler::linear_clamp_cinfo(device_.get_physical_device(), img_tinfo.meta.levels);
 
-	result_.p_background = std::make_unique<Texture>(std::move(resource), Sampler(device_, sampler_cinfo));
+	result_.p_background = std::make_unique<PBRTexture>(std::move(resource), Sampler(device_, sampler_cinfo));
 }
 
+// Create and bake the irradiance texture.
 void PBRBaker::prepare_irradiance()
 {
 	ImageMetaInfo cube_meta{
@@ -126,6 +132,9 @@ void PBRBaker::prepare_irradiance()
 		rdoc_api->EndFrameCapture(NULL, NULL);
 };
 
+// Bake the irradiance texture.
+// The irradiance texture is a convoluted cubemap that allows us to query the irradiance using a direction.
+// The position is assumed to be fixed. We store the irradiance at postion p with direction N at cubemap's textel at N.
 void PBRBaker::bake_irradiance(ImageMetaInfo &cube_meta)
 {
 	RenderPass           render_pass        = create_color_only_renderpass(cube_meta.format);
@@ -186,12 +195,18 @@ void PBRBaker::bake_irradiance(ImageMetaInfo &cube_meta)
 	uint32_t  img_height = cube_meta.extent.height;
 	glm::mat4 pco        = glm::mat4(1.0f);
 
+	// We need to render to all 6 faces and all mipmap levels.
 	for (uint32_t m = 0; m < cube_meta.levels; m++)
 	{
 		img_width  = std::max(1u, cube_meta.extent.width >> m);
 		img_height = std::max(1u, cube_meta.extent.height >> m);
 		for (uint32_t f = 0; f < 6; f++)
 		{
+			// We render to f face at m level.
+			// Once we finished rendering it, convert the format for transfer src.
+			// Transfer the render result from the framebuffer to the PBRTexture.
+			// Convert the format back for rendering.
+			// Repeat for all f and m.
 			viewport.width  = img_width;
 			viewport.height = img_height;
 			pco             = glm::perspective(glm::pi<float>() / 2.0f, 1.0f, 0.1f, 512.0f) * CUBE_FACE_MATRIXS[f];
@@ -235,6 +250,7 @@ void PBRBaker::bake_irradiance(ImageMetaInfo &cube_meta)
 	device_.end_one_time_buf(bake_buf);
 }
 
+// Create the prefilter PBRTexture and bake it.
 void PBRBaker::prepare_prefilter()
 {
 	ImageMetaInfo cube_meta{
@@ -254,6 +270,9 @@ void PBRBaker::prepare_prefilter()
 		rdoc_api->EndFrameCapture(NULL, NULL);
 }
 
+// Bake the prefilter texture.
+// Similar to Irradiance map, we allow shader to use a direction N to sample from the texture.
+// The position is assumed to be fixed. We store the prefilter at postion p with direction N at cubemap's textel at N.
 void PBRBaker::bake_prefilter(ImageMetaInfo &cube_meta)
 {
 	RenderPass           render_pass        = create_color_only_renderpass(cube_meta.format);
@@ -320,11 +339,15 @@ void PBRBaker::bake_prefilter(ImageMetaInfo &cube_meta)
 	uint32_t img_height = cube_meta.extent.height;
 	uint32_t div        = 1u;
 
+	// See irradiance map rendering. We go through the same process here.
 	for (uint32_t m = 0; m < cube_meta.levels; m++)
 	{
-		img_width     = std::max(1u, cube_meta.extent.width >> m);
-		img_height    = std::max(1u, cube_meta.extent.height >> m);
+		img_width  = std::max(1u, cube_meta.extent.width >> m);
+		img_height = std::max(1u, cube_meta.extent.height >> m);
+		// The higher the mipmap levels, the higher the roughness.
+		// Lower resolution has less of a impact when the roughness is high.
 		pco.roughness = m / static_cast<float>(cube_meta.levels - 1);
+
 		for (uint32_t f = 0; f < 6; f++)
 		{
 			viewport.width  = img_width;
@@ -368,6 +391,7 @@ void PBRBaker::bake_prefilter(ImageMetaInfo &cube_meta)
 	device_.end_one_time_buf(bake_buf);
 }
 
+// Create the brdf lut texture and bake it.
 void PBRBaker::prepare_brdf_lut()
 {
 	create_brdf_lut_texture();
@@ -378,6 +402,7 @@ void PBRBaker::prepare_brdf_lut()
 		rdoc_api->EndFrameCapture(NULL, NULL);
 }
 
+// The brdf lut texture is just a 2d teuxtre.
 void PBRBaker::create_brdf_lut_texture()
 {
 	vk::ImageCreateInfo image_cinfo{
@@ -403,11 +428,12 @@ void PBRBaker::create_brdf_lut_texture()
 
 	vk::SamplerCreateInfo sample_cinfo = Sampler::linear_clamp_cinfo(device_.get_physical_device(), 1);
 
-	result_.p_brdf_lut = std::make_unique<Texture>(
+	result_.p_brdf_lut = std::make_unique<PBRTexture>(
 	    ImageResource(std::move(img), std::move(view)),
 	    Sampler(device_, sample_cinfo));
 }
 
+// Bake the brdf lut.
 void PBRBaker::bake_brdf_lut()
 {
 	RenderPass                   render_pass = create_color_only_renderpass(vk::Format::eR16G16Sfloat, vk::ImageLayout::eUndefined, vk::ImageLayout::eShaderReadOnlyOptimal);
@@ -468,6 +494,7 @@ void PBRBaker::bake_brdf_lut()
 	    },
 	};
 
+	// We simply render directly to the brdf texture. No copying is needed.
 	bake_buf_handle.beginRenderPass(pass_begin_info, vk::SubpassContents::eInline);
 	bake_buf_handle.setViewport(0, viewport);
 	bake_buf_handle.setScissor(0, scissor);
@@ -478,13 +505,15 @@ void PBRBaker::bake_brdf_lut()
 	device_.end_one_time_buf(bake_buf);
 }
 
-std::unique_ptr<Texture> PBRBaker::create_empty_cube_texture(ImageMetaInfo &cube_meta)
+// Helper function to create a cube PBRTexture
+std::unique_ptr<PBRTexture> PBRBaker::create_empty_cube_texture(ImageMetaInfo &cube_meta)
 {
 	vk::SamplerCreateInfo sampler_cinfo = Sampler::linear_clamp_cinfo(device_.get_physical_device(), cube_meta.levels);
 
-	return std::make_unique<Texture>(create_empty_cubic_img_resource(cube_meta), Sampler(device_, sampler_cinfo));
+	return std::make_unique<PBRTexture>(create_empty_cubic_img_resource(cube_meta), Sampler(device_, sampler_cinfo));
 }
 
+// Create a cube image resource with max mipmap levels.
 ImageResource PBRBaker::create_empty_cubic_img_resource(ImageMetaInfo &meta)
 {
 	vk::ImageCreateInfo img_cinfo{
@@ -507,6 +536,7 @@ ImageResource PBRBaker::create_empty_cubic_img_resource(ImageMetaInfo &meta)
 	return ImageResource(std::move(img), ImageView(device_, view_cinfo));
 }
 
+// Create a renderpass that targets one color attachment.
 RenderPass PBRBaker::create_color_only_renderpass(vk::Format format, vk::ImageLayout initial_layout, vk::ImageLayout final_layout)
 {
 	vk::AttachmentDescription color_attachment = RenderPass::color_attachment(format, initial_layout, final_layout);
@@ -521,6 +551,7 @@ RenderPass PBRBaker::create_color_only_renderpass(vk::Format format, vk::ImageLa
 	    .pColorAttachments    = &color_ref,
 	};
 
+	// Default subpass dependency for the beginning of the renderpass and the end of the renderpass.
 	std::array<vk::SubpassDependency, 2> dependencys;
 	dependencys[0] = vk::SubpassDependency{
 	    .srcSubpass      = VK_SUBPASS_EXTERNAL,
@@ -553,6 +584,8 @@ RenderPass PBRBaker::create_color_only_renderpass(vk::Format format, vk::ImageLa
 	return RenderPass(device_, render_pass_cinfo);
 }
 
+// Create an image resource suitable for being the transfer resource.
+// The result will be used as a framebuffer in bake_irradiance and bake_prefilter.
 ImageResource PBRBaker::create_transfer_src(vk::Extent3D extent, vk::Format format)
 {
 	vk::ImageCreateInfo transfer_src_cinfo{
@@ -581,6 +614,7 @@ ImageResource PBRBaker::create_transfer_src(vk::Extent3D extent, vk::Format form
 	return resrc;
 }
 
+// Helper function to create a square framebuffer.
 Framebuffer PBRBaker::create_square_framebuffer(const RenderPass &render_pass, const ImageView &view, uint32_t dimension)
 {
 	vk::ImageView             view_handle = view.get_handle();
@@ -595,6 +629,7 @@ Framebuffer PBRBaker::create_square_framebuffer(const RenderPass &render_pass, c
 	return Framebuffer(device_, framebuffer_cinfo);
 }
 
+// Helper function to create a graphics pipeline with the default state.
 GraphicsPipeline PBRBaker::create_graphics_pipeline(RenderPass &render_pass, vk::PipelineLayoutCreateInfo &pl_layout_cinfo, const char *vert_shader_name, const char *frag_shader_name)
 {
 	std::array<vk::VertexInputBindingDescription, 1> binding_descriptions;
@@ -620,7 +655,8 @@ GraphicsPipeline PBRBaker::create_graphics_pipeline(RenderPass &render_pass, vk:
 	return GraphicsPipeline(device_, render_pass, state, pl_layout_cinfo);
 }
 
-DescriptorAllocation PBRBaker::allocate_texture_descriptor(Texture &texture)
+// Helper function to create descriptors for the texture.
+DescriptorAllocation PBRBaker::allocate_texture_descriptor(PBRTexture &texture)
 {
 	vk::DescriptorImageInfo desc_iinfo{
 	    .sampler     = texture.sampler.get_handle(),
@@ -630,6 +666,7 @@ DescriptorAllocation PBRBaker::allocate_texture_descriptor(Texture &texture)
 	return DescriptorBuilder::begin(desc_state_.cache, desc_state_.allocator).bind_image(0, desc_iinfo, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eFragment).build();
 }
 
+// Helper function that writes the commands to draw the textured box.
 void PBRBaker::draw_box(CommandBuffer &cmd_buf)
 {
 	vk::CommandBuffer cmd_buf_handle = cmd_buf.get_handle();
@@ -638,7 +675,8 @@ void PBRBaker::draw_box(CommandBuffer &cmd_buf)
 	cmd_buf_handle.drawIndexed(result_.p_box->idx_count_, 1, 0, 0, 0);
 }
 
-void PBRBaker::transfer_from_src_to_texture(CommandBuffer &cmd_buf, ImageResource &src, Texture &texture, vk::ImageCopy copy_region)
+// Helper function that copy data from the src to the PBRTexture.
+void PBRBaker::transfer_from_src_to_texture(CommandBuffer &cmd_buf, ImageResource &src, PBRTexture &texture, vk::ImageCopy copy_region)
 {
 	cmd_buf.set_image_layout(src, vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::eTransferSrcOptimal);
 	cmd_buf.get_handle().copyImage(src.get_image().get_handle(), vk::ImageLayout::eTransferSrcOptimal, texture.resource.get_image().get_handle(), vk::ImageLayout::eTransferDstOptimal, copy_region);

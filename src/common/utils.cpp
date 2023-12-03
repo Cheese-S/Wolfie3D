@@ -11,9 +11,11 @@
 #include "scene_graph/scripts/arc_ball_camera.hpp"
 #include "scene_graph/scripts/free_camera.hpp"
 
-
 namespace W3D
 {
+
+// Convert a string to snake case.
+// * This allows us to have one format for texture names.
 std::string to_snake_case(const std::string &text)
 {
 	std::stringstream result;
@@ -44,6 +46,8 @@ std::string to_snake_case(const std::string &text)
 	return result.str();
 }
 
+// Add a free camera script to a scene.
+// The camera node is responsible to manage the script's lifetime.
 sg::Node *add_free_camera_script(sg::Scene &scene, const std::string &node_name, int width,
                                  int height)
 {
@@ -56,6 +60,8 @@ sg::Node *add_free_camera_script(sg::Scene &scene, const std::string &node_name,
 	return p_node;
 }
 
+// Add a arc ball camera script to a scene.
+// The camera node is responsible to manage the script's lifetime.
 sg::Node *add_arc_ball_camera_script(sg::Scene &scene, const std::string &node_name, int width, int height)
 {
 	sg::Node                          *p_node   = find_valid_camera_node(scene, node_name);
@@ -67,6 +73,8 @@ sg::Node *add_arc_ball_camera_script(sg::Scene &scene, const std::string &node_n
 	return p_node;
 }
 
+// Find an existing camera node in the scene.
+// Throw an error if none is found.
 sg::Node *find_valid_camera_node(sg::Scene &scene, const std::string &node_name)
 {
 	auto camera_node = scene.find_node(node_name);
@@ -89,6 +97,7 @@ sg::Node *find_valid_camera_node(sg::Scene &scene, const std::string &node_name)
 	return camera_node;
 }
 
+// Calculate the max mipmap levels given the width and the height.
 uint32_t max_mip_levels(uint32_t width, uint32_t height)
 {
 	uint32_t levels = 1;

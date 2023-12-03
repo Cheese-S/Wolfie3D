@@ -9,6 +9,7 @@ AABB::AABB()
 	reset();
 }
 
+// Create an AABB with the given size.
 AABB::AABB(const glm::vec3 &min, const glm::vec3 &max) :
     min_(min),
     max_(max)
@@ -20,18 +21,22 @@ std::type_index AABB::get_type()
 	return typeid(AABB);
 }
 
+// Update the bound to include this point.
 void AABB::update(const glm::vec3 &point)
 {
 	min_ = glm::min(min_, point);
 	max_ = glm::max(max_, point);
 }
 
+// Update the bound with a new set of bounds.
 void AABB::update(const glm::vec3 &min, const glm::vec3 &max)
 {
 	min_ = glm::min(min_, min);
 	max_ = glm::max(max_, max);
 }
 
+// Union another AABB.
+// * This AABB is now the union.
 void AABB::update(const AABB &b)
 {
 	min_ = glm::min(min_, b.min_);
@@ -91,6 +96,7 @@ glm::vec3 AABB::get_max() const
 	return max_;
 }
 
+// Reset to a invalid AABB.
 void AABB::reset()
 {
 	min_ = std::numeric_limits<glm::vec3>::max();

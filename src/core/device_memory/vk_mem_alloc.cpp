@@ -1,5 +1,7 @@
 #include "common/error.hpp"
 
+// Include the VMA implementation.
+
 #define VMA_IMPLEMENTATION
 
 W3D_DISABLE_WARNINGS();

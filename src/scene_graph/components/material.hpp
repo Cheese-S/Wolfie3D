@@ -14,6 +14,8 @@ enum class AlphaMode
 	Blend
 };
 class Texture;
+
+// Base class for material.
 class Material : public Component
 {
   public:
